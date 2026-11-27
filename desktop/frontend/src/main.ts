@@ -52,7 +52,7 @@ function updateControls(){
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
  btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
- el("saved").textContent=!loaded?"读取失败":dirty?"未保存":"";el("saved").title=dirty?"运行前仍会按原规则保存；也可手动保存。":"";for(const b of Array.from(el("tabs").querySelectorAll<HTMLButtonElement>("button")))b.disabled=busy;
+ workbench.controls();el("saved").textContent=!loaded?"读取失败":dirty?"未保存":"";el("saved").title=dirty?"运行前仍会按原规则保存；也可手动保存。":"";for(const b of Array.from(el("tabs").querySelectorAll<HTMLButtonElement>("button")))b.disabled=busy;
 }
 function caseResult(index:number){return last?.cases.find(c=>c.index===index)}
 function matches(c:CaseResult,index:number){const current=cases[index]??{input:"",expected:null};return current.input===c.input&&current.expected===c.expected}
@@ -243,7 +243,7 @@ async function run(all:boolean){
 btn("open").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseSource")));
 btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseFolder")));
 btn("refreshTree").onclick=()=>void refreshTree(true);
-btn("ojImport").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void navigate(async()=>{const r=await ojImport.run(source?.path??"",root);if(!r)return;await select(r.nav);status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"")})};
+btn("ojImport").onclick=()=>{void navigate(async()=>{const r=await ojImport.run(source?.path??"",root);if(!r)return;await select(r.nav);status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"")})};
 btn("ojOpenOriginal").onclick=async()=>{const path=source?.path;if(!path||busy)return;try{await call("OJOpenOriginal",path)}catch(e){status.textContent=String(e)}};
 btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await syncOJWorkspace();status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target)await select(await call<Nav>("Create",target.dir,target.name))})}
@@ -280,7 +280,8 @@ const ojStatus=installOJStatus(call,()=>workbench.paths(),()=>source?.path??"",(
 const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message},ojStatus.poll);
 const documentReader=installDocument(call);
 const workbench=installWorkbench(call,path=>{if(path!==source?.path)void navigate(async()=>select(await call<Nav>("Select",path)))},()=>{void syncOJWorkspace()},()=>source?.path??"",ojStatus.mark,()=>busy);
-async function syncOJWorkspace(){if(!workbench.active()){ojStatus.clear();return}await workbench.scan();if(!workbench.active())return;await ojImport.refresh(source?.path??"");if(!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
+let workspaceEpoch=0;
+async function syncOJWorkspace(){const n=++workspaceEpoch;if(!workbench.active()){ojStatus.clear();return}await workbench.scan();if(n!==workspaceEpoch||!workbench.active())return;await ojImport.refresh(source?.path??"");if(n!==workspaceEpoch||!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");
@@ -315,7 +316,7 @@ btn("closeConfig").onclick=()=>config.close();
 async function syncOJVisibility(){try{const a=await call<{available:boolean}>("OJAccountStatus");workbench.availability(a.available)}catch{workbench.availability(false)}await syncOJWorkspace();updateControls()}
 config.addEventListener("close",()=>{void syncOJVisibility()});
 async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true;updateControls();try{await ojStatus.refresh(paths)}finally{busy=false;updateControls()}}
-btn("ojRefreshTree").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void refreshOJ(workbench.groupPaths())};
+btn("ojRefreshTree").onclick=()=>{void refreshOJ(workbench.groupPaths())};
 btn("ojRefreshCurrent").onclick=()=>{if(source)void refreshOJ([source.path])};
 
 btn("saveConfig").onclick=async()=>{compilerByLanguage.c=el<HTMLInputElement>("cc").value.trim();compilerByLanguage.cpp=el<HTMLInputElement>("cxx").value.trim();if(source)compiler.value=compilerByLanguage[language(source)];markStale();await storeConfig();config.close()};

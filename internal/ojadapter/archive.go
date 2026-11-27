@@ -34,6 +34,7 @@ func BuildArchivePlan(result ImportResult,dir,ext,attach string,inspect CaseInsp
     if e==nil{var empty bool;row.revision,empty,e=inspect(path);if !empty{row.Samples=0;row.Warnings=append(row.Warnings,"保留现有样例")}}
    }else if !os.IsNotExist(err)||attach!=""{e=errors.New("目标源码无效")}else{e=checkNew(path)}
   }
+  if e==nil&&row.Document!=""&&row.Action!="create"{for _,name:=range []string{filepath.Base(path)+".md","problem.md",strings.TrimSuffix(filepath.Base(path),filepath.Ext(path))+".md"}{if st,err:=os.Lstat(filepath.Join(filepath.Dir(path),name));err==nil&&st.Mode().IsRegular(){row.Document="";row.Warnings=append(row.Warnings,"保留已有本地文档");break}}}
   if e==nil&&row.Document!=""{if st,err:=os.Lstat(filepath.Join(filepath.Dir(path),row.Document));err==nil{if row.Action=="create"||!st.Mode().IsRegular(){e=errors.New("题面路径冲突")}else{row.Document="";row.Warnings=append(row.Warnings,"保留已有题面")}}else if !os.IsNotExist(err){e=err}}
   if e==nil&&row.Action=="repair"&&row.Samples==0&&row.Document==""{e=errors.New("已有同题关联，无缺失资料")}
   if e!=nil{row.Action="skip";row.Samples=0;row.Document="";row.Warnings=append(row.Warnings,e.Error())}

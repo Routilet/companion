@@ -13,12 +13,12 @@ export function installOJImport<T>(call:Call){
   const n=++epoch,binding=el("ojBinding");binding.hidden=true;el("ojBindingError").hidden=true;
   let available=false;try{available=(await call<{available:boolean}>("OJAccountStatus")).available}catch{/* unavailable */}
   if(n!==epoch)return false;
-  if(!available||!path)return available;try{const b=await call<Binding|null>("OJBinding");if(n!==epoch||!b)return available;el("ojBindingTitle").textContent=`Accoding · ${b.label} · ${b.title}`;btn("ojOpenOriginal").textContent=b.target.kind==="contest"?"打开原比赛 ↗":"打开原题 ↗";binding.hidden=false}catch{if(n===epoch){el("ojBindingError").textContent="题目关联无法读取，原文件保留。";el("ojBindingError").hidden=false}}
+  if(!available||!path||btn("ojImport").hidden)return available;try{const b=await call<Binding|null>("OJBinding");if(n!==epoch||!b||btn("ojImport").hidden)return available;el("ojBindingTitle").textContent=`Accoding · ${b.label} · ${b.title}`;btn("ojOpenOriginal").textContent=b.target.kind==="contest"?"打开原比赛 ↗":"打开原题 ↗";binding.hidden=false}catch{if(n===epoch&&!btn("ojImport").hidden){el("ojBindingError").textContent="题目关联无法读取，原文件保留。";el("ojBindingError").hidden=false}}
   return available;
  }
  async function run(path:string,root:string):Promise<Apply<T>|null>{
   const a=await call<{available:boolean;state:string}>("OJAccountStatus");if(!a.available)throw Error("Accoding Adapter 不可用");if(a.state!=="signed_in"&&a.state!=="unverified")throw Error("请先在设置中登录 Accoding");
-  const url=el<HTMLInputElement>("ojImportURL"),lang=el<HTMLSelectElement>("ojImportLang"),attach=el<HTMLInputElement>("ojImportAttach");url.value="";attach.checked=false;attach.disabled=!path;lang.value=path&&!/\.c$/i.test(path)?".cpp":".c";
+  const url=el<HTMLInputElement>("ojImportURL"),lang=el<HTMLSelectElement>("ojImportLang"),attach=el<HTMLInputElement>("ojImportAttach");url.value="";attach.checked=false;attach.disabled=!path;lang.value=".c";attach.onchange=()=>{btn("ojChooseDestination").disabled=attach.checked;if(attach.checked&&path)lang.value=/\.c$/i.test(path)?".c":".cpp"};btn("ojChooseDestination").disabled=false;
   let destination=root;const recent=el<HTMLSelectElement>("ojRecent");recent.replaceChildren(new Option("手动输入链接",""));el("ojDestination").textContent=destination;el("ojRecentNotice").textContent="正在读取近期比赛…";
   btn("ojChooseDestination").onclick=async()=>{try{const p=await call<string>("ChooseCreateDirectory");if(p&&dialog.open){destination=p;el("ojDestination").textContent=p}}catch(e){el("ojRecentNotice").textContent=String(e)}};
   recent.onchange=()=>{if(recent.value)url.value="https://accoding.buaa.edu.cn/contest-ng/index.html#/"+recent.value};url.oninput=()=>{recent.value=""};btn("ojMoreContests").onclick=()=>{void call("OJOpenContestList").catch(e=>{el("ojRecentNotice").textContent=String(e)})};

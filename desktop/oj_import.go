@@ -65,7 +65,8 @@ func (d *Desktop) ojPreviewImport(link, ext string, attach bool, destination str
 	if _, e := localrun.Within(root, dir); e != nil {
 		return OJPreview{}, e
 	}
-	result, e := d.accounts.Import(context.Background(), link)
+	if d.accounts==nil||!d.accounts.Status().Available{return OJPreview{},errors.New("Adapter 不可用")}
+ result, e := d.accounts.Import(context.Background(), link)
 	if e != nil {
 		return OJPreview{}, e
 	}
@@ -102,7 +103,7 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 		return out, errors.New("导入预览已失效")
 	}
 	p := pending.plan
-	if a := d.accounts.Status(); a.ID != p.AccountID || a.State != "signed_in" {
+	if a := d.accounts.Status(); !a.Available || a.ID != p.AccountID || a.State != "signed_in" {
 		return out, errors.New("账号状态已变化，请重新预览")
 	}
 	if _, e := localrun.Within(d.root, p.Directory); e != nil {
@@ -145,7 +146,7 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 				continue
 			}
 		}
-		if row.Action!="repair"{e=ojadapter.SaveBinding(s.Path,row.Problem().Binding())}
+		if row.Action!="repair"{binding:=row.Problem().Binding();if binding.Target.Kind=="contest"{binding.ContestTitle=p.Title};e=ojadapter.SaveBinding(s.Path,binding)}
   if e != nil {
 			out.Failed = append(out.Failed, row.Name+"：关联未保存；源码和已有样例保留："+e.Error())
 			continue

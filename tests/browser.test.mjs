@@ -264,3 +264,10 @@ test('detailed judge table uses actual line structure and concise signal guidanc
  await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojDetailBtn').click();
  assert.match(await p.locator('#ojDetailBody').textContent(),/SIGSEGV.*非法内存访问/);assert.equal(await p.locator('#ojDetailBody tr').count(),3)
 });
+
+test('ordinary copy remains offline even when OJ is installed',async t=>{
+ const p=await setup(t);await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'题',label:'A',target:{kind:'problemset',problemId:'5'}}});
+ await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();
+ await p.locator('#copy').click();assert.equal(await p.locator('#ojSubmitArea').isVisible(),false);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSubmissionAvailable').length),0)
+});

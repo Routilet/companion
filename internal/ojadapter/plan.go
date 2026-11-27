@@ -121,7 +121,8 @@ func BuildPlan(result ImportResult, dir, ext, attach string, revision CaseRevisi
 // Recheck immediately before any write; stale plans fail closed.
 func (p Plan) Recheck(row PlanRow, revision CaseRevision) error {
 	path := filepath.Join(p.Directory, row.Name)
-	switch row.Action {
+	if p.Archive&&row.Document!=""{if e:=archivePath(p.Directory,path);e!=nil{return e};if _,e:=os.Lstat(filepath.Join(filepath.Dir(path),row.Document));e==nil||!os.IsNotExist(e){return errors.New("题面路径已存在或无效")}}
+ switch row.Action {
 	case "create":
         if p.Archive {if e:=archivePath(p.Directory,path);e!=nil{return e};if row.Document!=""{if _,e:=os.Lstat(filepath.Join(filepath.Dir(path),row.Document));e==nil||!os.IsNotExist(e){return errors.New("题面路径已存在或无效")}}}
 		return checkNew(path)

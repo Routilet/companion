@@ -15,7 +15,7 @@ func(d *Desktop)OJWorkspace()(OJWorkspaceView,error){
    sources++;if sources>4096{out.Limited=true;break}
    b,e:=ojadapter.LoadBinding(entry.Path);if e!=nil||b==nil{continue}
    group:=dir
-   if b.Target.Kind=="contest"&&filepath.Base(dir)==b.Label&&filepath.Base(filepath.Dir(dir))=="contest-"+b.Target.ContestID{group=filepath.Dir(dir)}
+   if b.Target.Kind=="contest"&&(filepath.Base(dir)==b.Label||filepath.Base(dir)=="q"+b.Label){group=filepath.Dir(dir)}
    rel,_:=filepath.Rel(root,group);if rel=="."{rel=filepath.Base(root)}
    out.Items=append(out.Items,OJItem{entry.Path,dir,rel,*b});if len(out.Items)>=512{out.Limited=true;return out,nil}
   }
