@@ -85,7 +85,7 @@ func CreateSourceWithKit(root,dir,name,packageRoot string)(Source,error){
  cp:=filepath.Join(p,".companion","cases",name+".json")
  if e=caseDirs(cp,false);e==nil{if e=absent(cp);e!=nil{return Source{},e}}else if !errors.Is(e,os.ErrNotExist){return Source{},e}
  code:="#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n"
- if isCPP(name){code="#include <iostream>\n\nint main() {\n    return 0;\n}\n"}else{
+ if isCPP(name){code="#include <iostream>\n\nint main() {\n    return 0;\n}\n"}else if packageRoot!=""{
   k,e:=LoadKitPackage(packageRoot);if e!=nil{return Source{},e}
   snapshot,e:=SaveKitSnapshot(root,k);if e!=nil{return Source{},e}
   include,e:=filepath.Rel(p,filepath.Join(snapshot,"expanded.h"));if e!=nil{return Source{},e}

@@ -303,7 +303,7 @@ btn("copy").onclick=async()=>{if(busy)return;busy=true;updateControls();try{prep
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};
-function showKit(k:KitStatus){el("kitStatus").textContent=k.error?"资源不可用："+k.error:"Exam Kit "+k.version+" · "+k.path}
+function showKit(k:KitStatus){el("kitStatus").textContent=k.error?"资源不可用："+k.error:"当前会话资源版本："+k.version}
 btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;config.showModal();ojStatus.clear();ojAccount.open();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
 btn("closeConfig").onclick=()=>config.close();
 async function syncOJVisibility(){await ojImport.refresh(source?.path??"");await ojStatus.refreshLocal();updateControls()}

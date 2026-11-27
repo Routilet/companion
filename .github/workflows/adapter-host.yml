@@ -69,6 +69,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet -mod=readonly ./internal/ojadapter
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -mod=readonly -count=1 -v ./internal/localrun -run TestRealManagedKit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Real adapter and host (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -83,3 +85,4 @@ jobs:
           (cd manager-fixture/desktop && go build -mod=readonly -tags production -o "$manager" .)
           COMPANION_TEST_MANAGER="$manager" COMPANION_TEST_ADAPTER="$adapter" go test -mod=readonly -count=1 -v ./internal/ojadapter
           go vet -mod=readonly ./internal/ojadapter
+          COMPANION_TEST_MANAGER="$manager" go test -mod=readonly -count=1 -v ./internal/localrun -run TestRealManagedKit

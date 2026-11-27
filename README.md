@@ -10,7 +10,7 @@ Routilet 的文件优先 C/C++ 编程辅助工具。普通源文件和文件夹�
 
 测试版真实 Accoding 平台与实际 WebView 尚待用户验收，不宣称正式稳定版。不迁移旧课程数据，不更改旧 npm 包。请遵守课程考试规定；运行可信源码，本地运行不是沙箱。
 
-- [发行与集成](docs/distribution.md) · [beta.3 发行说明](docs/release-beta.3.md)
+- [发行与集成](docs/distribution.md) · [beta.4 发行说明](docs/release-beta.4.md)
 - [正式 Adapter 接入](docs/managed-adapter.md) · [设计与路线图](docs/companion-next-roadmap.md)
 - [存储设计](docs/companion-next-storage.md) · [核心接口](docs/companion-next-api.md)
 - [迁移来源与验收](docs/migration.md) · [开发与测试](docs/development.md)
