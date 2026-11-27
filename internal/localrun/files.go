@@ -18,7 +18,7 @@ func sourceExtension(p string)bool{
  switch strings.ToLower(filepath.Ext(p)){case ".c",".cpp",".cc",".cxx":return true};return false
 }
 func isCPP(p string)bool{return !strings.EqualFold(filepath.Ext(p),".c")}
-func hiddenDir(n string)bool{return strings.HasPrefix(n,".")||strings.EqualFold(n,"node_modules")}
+func hiddenDir(n string)bool{return strings.HasPrefix(n,".")||strings.EqualFold(n,"node_modules")||strings.HasSuffix(strings.ToLower(n),".dsym")}
 func OpenDirectory(p string)(string,error){
  p,e:=filepath.Abs(p);if e!=nil{return "",e}
  if e=safeDir(p,false);e!=nil{return "",e}

@@ -26,6 +26,7 @@ type Problem struct {
 	Samples   []Sample `json:"samples"`
 	Warnings  []string `json:"warnings"`
 	Special   bool     `json:"special"`
+ Statement string `json:"statement,omitempty"`
 }
 type ImportResult struct {
 	AccountID string    `json:"accountId"`
@@ -78,7 +79,7 @@ func (r ImportResult) Validate(account string) error {
 	first := r.Problems[0].Target
 	for _, p := range r.Problems {
 		n, e := p.Filename(".c")
-		if e != nil || names[n] || seen[p.Target] || p.Target.URL() == "" || p.SourceURL != p.Target.URL() || p.Target.Kind != first.Kind || p.Target.ContestID != first.ContestID || p.Title == "" || !validText(p.Title, 4096) || !validText(p.Label, 128) || len(p.Warnings) > 64 || len(p.Samples) > 32 || p.Special && len(p.Samples) != 0 || p.Target.Kind == "problemset" && len(r.Problems) != 1 {
+		if e != nil || names[n] || seen[p.Target] || p.Target.URL() == "" || p.SourceURL != p.Target.URL() || p.Target.Kind != first.Kind || p.Target.ContestID != first.ContestID || p.Title == "" || !validText(p.Title, 4096) || !validText(p.Statement,512<<10) || !validText(p.Label, 128) || len(p.Warnings) > 64 || len(p.Samples) > 32 || p.Special && len(p.Samples) != 0 || p.Target.Kind == "problemset" && len(r.Problems) != 1 {
 			return errors.New("导入题目数据无效或重复")
 		}
 		seen[p.Target] = true
@@ -108,7 +109,8 @@ func (a *Accounts) Import(ctx context.Context, link string) (ImportResult, error
 	}
 	id := a.state.ID
 	var r ImportResult
-	if err := a.session.Call(ctx, "import", map[string]string{"url": link}, &r); err != nil {
+	method:="import";if a.hasMethod("import_document"){method="import_document"}
+ if err := a.session.Call(ctx, method, map[string]string{"url": link}, &r); err != nil {
 		var remote *RemoteError
 		if !errors.As(err, &remote) {
 			a.reset()

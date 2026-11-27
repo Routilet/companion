@@ -15,6 +15,7 @@ type PlanRow struct {
 	Action   string   `json:"action"`
 	Samples  int      `json:"samples"`
 	Warnings []string `json:"warnings"`
+ Document string `json:"document,omitempty"`
 	problem  Problem
 	info     os.FileInfo
 	revision string
@@ -25,6 +26,7 @@ type Plan struct {
 	Rows      []PlanRow `json:"rows"`
 	AccountID string    `json:"-"`
 	Attach    string    `json:"-"`
+ Archive bool `json:"-"`
 }
 
 // CaseRevision is supplied by the existing Companion case store for an existing source.
@@ -119,9 +121,16 @@ func BuildPlan(result ImportResult, dir, ext, attach string, revision CaseRevisi
 // Recheck immediately before any write; stale plans fail closed.
 func (p Plan) Recheck(row PlanRow, revision CaseRevision) error {
 	path := filepath.Join(p.Directory, row.Name)
-	switch row.Action {
+	if p.Archive&&row.Document!=""{if e:=archivePath(p.Directory,path);e!=nil{return e};if _,e:=os.Lstat(filepath.Join(filepath.Dir(path),row.Document));e==nil||!os.IsNotExist(e){return errors.New("题面路径已存在或无效")}}
+ switch row.Action {
 	case "create":
+        if p.Archive {if e:=archivePath(p.Directory,path);e!=nil{return e};if row.Document!=""{if _,e:=os.Lstat(filepath.Join(filepath.Dir(path),row.Document));e==nil||!os.IsNotExist(e){return errors.New("题面路径已存在或无效")}}}
 		return checkNew(path)
+    case "repair":
+        if e:=archivePath(p.Directory,path);e!=nil{return e}
+        st,e:=os.Lstat(path);if e!=nil||row.info==nil||!st.Mode().IsRegular()||!os.SameFile(st,row.info){return errors.New("源码已变化")}
+        b,e:=LoadBinding(path);if e!=nil||b==nil||b.Target!=row.problem.Target{return errors.New("题目关联已变化")}
+        r,e:=revision(path);if e!=nil||r!=row.revision{return errors.New("测试数据已变化")};return nil
 	case "attach":
 		st, e := os.Lstat(path)
 		if e != nil || row.info == nil || !st.Mode().IsRegular() || !os.SameFile(row.info, st) {

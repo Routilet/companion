@@ -39,11 +39,11 @@ func TestRealManagedAdapter(t *testing.T){
  if runtime.GOOS=="windows"{platform,name="win32-x64","adapter.exe"}
  if e=os.WriteFile(filepath.Join(pkg,name),raw,0700);e!=nil{t.Fatal(e)}
  sum:=sha256.Sum256(raw)
- manifest:=map[string]any{"schemaVersion":1,"version":"0.1.0-beta.1","adapter":"accoding","protocol":Protocol,"platforms":map[string]any{platform:map[string]string{"path":name,"sha256":hex.EncodeToString(sum[:])}}}
+ manifest:=map[string]any{"schemaVersion":1,"version":"0.1.0-beta.2","adapter":"accoding","protocol":Protocol,"platforms":map[string]any{platform:map[string]string{"path":name,"sha256":hex.EncodeToString(sum[:])}}}
  b,_:=json.Marshal(manifest)
  if e=os.WriteFile(filepath.Join(pkg,"manifest.json"),b,0600);e!=nil{t.Fatal(e)}
  active:=filepath.Join(base,"activation.json")
- if e=os.WriteFile(active,[]byte(`{"Snapshot":"release-test","Version":"0.1.0-beta.1"}`),0600);e!=nil{t.Fatal(e)}
+ if e=os.WriteFile(active,[]byte(`{"Snapshot":"release-test","Version":"0.1.0-beta.2"}`),0600);e!=nil{t.Fatal(e)}
  a:=NewManagedAccounts(manager,"");a.store=&memoryStore{};defer a.Close()
  if a.Status().Available||a.session!=nil{t.Fatal("unexpected startup process")}
  if v:=a.CheckAvailability(context.Background());!v.Available||a.session!=nil{t.Fatal(v)}

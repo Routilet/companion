@@ -119,9 +119,18 @@ func TestRealAdapter(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
-	if c := s.Capabilities(); len(c.Methods) != 11 || c.Methods[0] != "capabilities" {
-		t.Fatal(c)
-	}
+	caps:=s.Capabilities()
+ methods:=map[string]bool{}
+ for _,m:=range caps.Methods{methods[m]=true}
+ for _,m:=range []string{"capabilities","account","login","logout","resolve","import","prepare","submit","reconcile","result","status","import_document","contests","status_detail","result_detail","contest_status"}{if !methods[m]{t.Fatal("missing",m,caps)}}
+ if caps.Version!="0.1.0-beta.2"{t.Fatal(caps)}
+ for _,q:=range []struct{method string;params any}{
+ {"import_document",map[string]string{"url":"https://accoding.buaa.edu.cn/problem/42/index"}},
+ {"contests",struct{}{}},
+ {"contest_status",map[string]any{"contestId":"42","problemIds":[]string{"5"}}},
+ {"status_detail",map[string]any{"target":map[string]string{"kind":"contest","contestId":"42","problemId":"5"}}},
+ {"result_detail",map[string]any{"target":map[string]string{"kind":"contest","contestId":"42","problemId":"5"},"id":"123"}},
+ }{var re *RemoteError;if e=s.Call(context.Background(),q.method,q.params,nil);!errors.As(e,&re)||re.Code!="auth"{t.Fatal(q.method,e)}}
 	var link struct {
 		Kind    string `json:"kind"`
 		ID      string `json:"id"`

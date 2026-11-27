@@ -316,7 +316,7 @@ func(d *Desktop) shutdown(){
  // while a debugger may need to clean up the inferior.
  if observerDone!=nil{<-observerDone}
 }
-var buildVersion="0.1.0-beta.4"
+var buildVersion="0.1.0-beta.5"
 func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
  if len(os.Args)==2&&os.Args[1]=="--check-install"{p,cleanup,e:=localrun.ResolveSessionKit(os.Getenv(localrun.RoutiletExecutableEnv));if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};defer cleanup();k,e:=localrun.LoadKitPackage(p);if e!=nil{cleanup();fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}

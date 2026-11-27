@@ -16,13 +16,14 @@ type Binding struct {
 	Label         string `json:"label"`
 	SourceURL     string `json:"sourceUrl"`
 	Target        Target `json:"target"`
+ ContestTitle string `json:"contestTitle,omitempty"`
 }
 
 func (p Problem) Binding() Binding {
-	return Binding{1, "accoding", p.Title, p.Label, p.SourceURL, p.Target}
+	return Binding{SchemaVersion:1,Adapter:"accoding",Title:p.Title,Label:p.Label,SourceURL:p.SourceURL,Target:p.Target}
 }
 func (b Binding) validate() error {
-	if b.SchemaVersion != 1 || b.Adapter != "accoding" || b.Target.URL() == "" || b.SourceURL != b.Target.URL() || b.Title == "" || !validText(b.Title, 4096) || !validText(b.Label, 128) {
+	if b.SchemaVersion != 1 || b.Adapter != "accoding" || b.Target.URL() == "" || b.SourceURL != b.Target.URL() || b.Title == "" || !validText(b.Title, 4096) || !validText(b.Label, 128) || !validText(b.ContestTitle,4096) {
 		return errors.New("题目关联文件无效")
 	}
 	return nil

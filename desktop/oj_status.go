@@ -93,13 +93,21 @@ func (d *Desktop) OJRefreshJudges(paths []string) (int, error) {
 		seen[b.Target] = true
 		targets = append(targets, b.Target)
 	}
-	if len(targets) > 20 {
-		return 0, errors.New("一次最多刷新 20 道题；请收起其他目录或单独刷新当前题目")
-	}
+	if len(targets)>200{return 0,errors.New("一次最多刷新 200 道题，请缩小范围")}
+ groups:=map[string][]ojadapter.Target{};var singles []ojadapter.Target
+ for _,t:=range targets{if t.Kind=="contest"{groups[t.ContestID]=append(groups[t.ContestID],t)}else{singles=append(singles,t)}}
 	count := 0
 	batch, stop := context.WithTimeout(context.Background(), 60*time.Second)
 	defer stop()
-	for _, t := range targets {
+	for _,group:=range groups{
+  if api,ok:=d.accounts.(interface{ContestJudges(context.Context,[]ojadapter.Target)([]ojadapter.JudgeStatus,error)});ok{
+   ctx,cancel:=context.WithTimeout(batch,20*time.Second);values,e:=api.ContestJudges(ctx,group);cancel()
+   if e==nil{if len(values)!=len(group)||d.accounts.Status().ID!=a.ID{return count,errors.New("评测账号或数量已变化")};for _,v:=range values{if v.AccountID!=a.ID{return count,errors.New("评测账号已变化")};d.rememberJudge(v);count++};continue}
+   if !errors.Is(e,ojadapter.ErrBatchUnsupported){return count,e}
+  };singles=append(singles,group...)
+ }
+ if len(singles)>20{return count,errors.New("旧 Adapter 或题库逐题查询最多 20 道题，请更新 Adapter 或缩小范围")}
+ for _, t := range singles {
 		if batch.Err() != nil {
 			return count, errors.New("刷新已超时；保留已有结果")
 		}
