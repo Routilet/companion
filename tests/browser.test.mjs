@@ -45,12 +45,12 @@ async function setup(t){
    case 'OJRefreshJudges':return 1;
    case 'OJUnbind':state.ojBinding=null;state.ojJudges={};return;
    case 'OJSubmissionAvailable':return !!state.ojAvailable&&!!state.ojBinding;
-   case 'KitStatus':return {version:'0.6.10',path:''};
+   case 'KitStatus':return {version:'0.6.10',path:''};case 'KitCreationWarning':return '';
    case 'ObserverStatus':return {available:false};
    case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
    case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:['C']},title:'测试题',label:'A',nickname:'fixture'};
    case 'OJSendSubmission':return {id:'12',result:'AC',accountId:'7',language:'C'};
-   case 'Version':return '0.1.0-beta.5';
+   case 'Version':return '0.1.0-beta.6';
    case 'Config':return {c:'',cpp:'',editor:'',root,selected:'A.c'};
    case 'ConfigWarning':return '';
    case 'Initial':return nav();

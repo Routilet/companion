@@ -242,6 +242,7 @@ func(d *Desktop) Create(dir,name string)(Navigation,error){
  }
  if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")}
  if b,e:=ojadapter.LoadBinding(filepath.Join(target,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
+ d.kitError=""
  packageRoot:="";cleanup:=func(){};if strings.EqualFold(filepath.Ext(name),".c"){var kitErr error;packageRoot,cleanup,kitErr=d.installedKit();if kitErr!=nil{packageRoot="";d.kitError=kitErr.Error()}else{d.kitError=""}};defer cleanup()
  s,e:=localrun.CreateSourceWithKit(root,target,name,packageRoot);if e!=nil{return Navigation{},e}
  d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil
@@ -332,7 +333,7 @@ func(d *Desktop) shutdown(){
  // while a debugger may need to clean up the inferior.
  if observerDone!=nil{<-observerDone}
 }
-var buildVersion="0.1.0-beta.5"
+var buildVersion="0.1.0-beta.6"
 func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
  if len(os.Args)==2&&os.Args[1]=="--check-install"{p,cleanup,e:=localrun.ResolveSessionKit(os.Getenv(localrun.RoutiletExecutableEnv));if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};defer cleanup();k,e:=localrun.LoadKitPackage(p);if e!=nil{cleanup();fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}

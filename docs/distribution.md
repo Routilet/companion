@@ -36,3 +36,6 @@ CI 验证真实发行资产和安装清单；实际管理器启动、中文路�
 
 ## beta.5 发行授权
 维护者授权一次性测试发行 Companion 0.1.0-beta.5 和 Accoding Adapter 0.1.0-beta.2，保留 Routilet 0.1.7 与独立 Exam Kit/Observer。仅 next；原有文件及绑定不迁移。主线发行须通过实际前端、两平台构建、候选安装和新 Adapter 管理器联合测试，并核对 npm 上新 Adapter 可见后发布。参见 [工作台规范](workbench-beta5.md) 与 [发行说明](release-beta.5.md)。
+
+## beta.6 发行授权
+维护者授权 Companion 0.1.0-beta.6 测试发行，配套 Routilet 0.1.8 启动锁修复；Adapter 0.1.0-beta.2、Exam Kit 0.6.10、Observer 无需新版本。资源按需读取并在单次操作内固定；旧快照保持。主线发布门禁包括实际浏览器、双平台原生构建与安装、固定新版管理器和 Adapter 联调及 npm 依赖可见性。仅 next，不覆盖旧版本。详见 [beta.6](release-beta.6.md)。

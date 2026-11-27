@@ -89,7 +89,7 @@ async function select(nav:Nav){
   if(seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，存在旧测试数据。是否继续使用这些样例？")){loaded=false;status.textContent="未确认旧样例；请重新选择文件";}else seenMissing.delete(source.path)}
   if(loaded){const cached=await call<Result|null>("Cached",compiler.value.trim());if(cached){if(seenMissing.has(source.path))cached.stale=true;show(cached)}await showOrphans()}
  }
- await documentReader.refresh(source?.path??"");await refreshTree(true);if(workbench.active())await syncOJWorkspace(false);updateControls();
+ await documentReader.refresh(source?.path??"");await refreshTree(true);if(workbench.active()&&!ojAccount.connecting())await syncOJWorkspace(false);else if(workbench.active())workbench.draw();updateControls();
 }
 async function showOrphans(){
  const box=el("orphans");box.replaceChildren();if(!source||cases.length||dirty||!loaded)return;
@@ -249,10 +249,10 @@ async function run(all:boolean){
 btn("open").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseSource")));
 btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseFolder")));
 btn("refreshTree").onclick=()=>void refreshTree(true);
-btn("ojImport").onclick=()=>{void navigate(async()=>{if(!await ojAccount.requireLogin())return;const r=await ojImport.run(source?.path??"",root);if(!r)return;await select(r.nav);await syncOJWorkspace();status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"")})};
+btn("ojImport").onclick=()=>{void navigate(async()=>{if(!await ojAccount.requireLogin())return;const r=await ojImport.run(source?.path??"",root);if(!r)return;await select(r.nav);await syncOJWorkspace();status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"");const warning=await call<string>("KitCreationWarning");if(warning)status.textContent+="；新建 C 文件未接入 Exam Kit："+warning})};
 btn("ojOpenOriginal").onclick=async()=>{const path=source?.path;if(!path||busy)return;try{await call("OJOpenOriginal",path)}catch(e){status.textContent=String(e)}};
 btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await syncOJWorkspace();status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
-function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target)await select(await call<Nav>("Create",target.dir,target.name))})}
+function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target){await select(await call<Nav>("Create",target.dir,target.name));if(/\.c$/i.test(target.name)){const warning=await call<string>("KitCreationWarning");if(warning)status.textContent="已创建普通 C 文件；Exam Kit 未接入："+warning}}})}
 btn("new").onclick=()=>void newFile();
 btn("newHere").onclick=()=>{const e=menuEntry;void newFile(e?.directory?e.path:source?.directory??root)};
 async function newFolder(dir:string){if(busy)return;busy=true;updateControls();drawTree();try{const name=await dialogs.name("新建文件夹","在 "+dir+" 中新建文件夹","新文件夹","新建");if(!name)return;const path=await call<string>("CreateFolder",dir,name);expanded.add(dir);expanded.add(path)}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();await refreshTree(true);drawTree()}}
@@ -286,7 +286,7 @@ const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message
 const documentReader=installDocument(call);
 const workbench=installWorkbench(call,path=>{if(path!==source?.path)void navigate(async()=>select(await call<Nav>("Select",path)))},()=>{void syncOJWorkspace();if(workbench.active())void ojAccount.enter()},()=>source?.path??"",ojStatus.mark,()=>busy);
 let workspaceEpoch=0;
-async function syncOJWorkspace(rescan=true){const n=++workspaceEpoch;if(!workbench.active()){ojStatus.clear();return}if(rescan||workbench.needsScan())await workbench.scan();else workbench.draw();if(n!==workspaceEpoch||!workbench.active())return;await ojImport.refresh(source?.path??"");if(n!==workspaceEpoch||!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
+async function syncOJWorkspace(rescan=true){const n=++workspaceEpoch;if(!workbench.active()){ojStatus.clear();return}if(ojAccount.connecting())return;if(rescan||workbench.needsScan())await workbench.scan();else workbench.draw();if(n!==workspaceEpoch||!workbench.active())return;await ojImport.refresh(source?.path??"");if(n!==workspaceEpoch||!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");

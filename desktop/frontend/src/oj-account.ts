@@ -22,7 +22,7 @@ export function installOJAccount(call:Call,dialog:HTMLDialogElement,onAvailabili
   const task=(async()=>{notice="";try{view=await call<View>(method,...args);notice=view.warning||""}catch(e){notice=String(e);try{view=await call<View>("OJAccountStatus")}catch{/* preserve error */}}})();
   working=task;draw();try{await task}finally{working=undefined;pass.value="";draw();onAvailability()}
  }
- let entering:Promise<void>|undefined;async function enter(){if(entering)return entering;if(attempted)return;attempted=true;const task=(async()=>{const v=await status();if(v?.available&&v.state==="signed_out"&&v.canRemember)await perform("OJRestore")})();entering=task;try{await task}finally{entering=undefined}}
+ let entering:Promise<void>|undefined;async function enter(){if(entering)return entering;if(attempted)return;attempted=true;const task=(async()=>{const v=await status();if(v?.available&&v.state==="signed_out"&&v.canRemember)await perform("OJRestore")})();entering=task;try{await task}finally{entering=undefined;onAvailability()}}
  function open(){if(!dialog.open)dialog.showModal();pass.value="";if(!working)void status()}
  async function requireLogin(){if(entering)await entering;if(working)await working;const v=await status();if(v?.available&&(v.state==="signed_in"||v.state==="unverified"))return true;open();await new Promise<void>(r=>dialog.addEventListener("close",()=>r(),{once:true}));if(working)await working;const after=await status();return !!after?.available&&(after.state==="signed_in"||after.state==="unverified")}
  btn("ojAccountEntry").onclick=open;btn("ojAccountClose").onclick=()=>dialog.close();
@@ -33,5 +33,5 @@ export function installOJAccount(call:Call,dialog:HTMLDialogElement,onAvailabili
  btn("ojRefresh").onclick=()=>void perform("OJRefresh");
  btn("ojLogout").onclick=()=>{attempted=true;void perform("OJLogout")};
  dialog.addEventListener("close",()=>{pass.value="";user.value="";remember.checked=false});
- return {enter,requireLogin,set,status,open};
+ return {enter,requireLogin,set,status,open,connecting:()=>!!working||!!entering};
 }
