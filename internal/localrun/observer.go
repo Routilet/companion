@@ -31,6 +31,7 @@ type ObserverInfo struct{
  Version string `json:"version"`
  Executable string `json:"executable"`
  Backend string `json:"backend"`
+ Managed bool `json:"managed,omitempty"`
  Error string `json:"error,omitempty"`
 }
 type observerCapabilities struct{
@@ -183,7 +184,10 @@ type ObserverProcess struct{
 type limitedLog struct{b bytes.Buffer}
 func(l *limitedLog)Write(p []byte)(int,error){n:=len(p);left:=16384-l.b.Len();if left>0{if len(p)>left{p=p[:left]};_,_=l.b.Write(p)};return n,nil}
 func StartObserver(info ObserverInfo,o Observation)(*ObserverProcess,error){
- cmd:=exec.Command(info.Executable,"--session",o.SessionPath)
+ args:=[]string{"--session",o.SessionPath}
+ if info.Managed{args=[]string{"--open-app","observer","--wait","--","--session",o.SessionPath}}
+ cmd:=exec.Command(info.Executable,args...)
+ if info.Managed{configureProcess(cmd)}
  cmd.Dir=filepath.Dir(info.Executable)
  log:=&limitedLog{};cmd.Stderr=log
  cmd.WaitDelay=2*time.Second
@@ -192,8 +196,10 @@ func StartObserver(info ObserverInfo,o Observation)(*ObserverProcess,error){
 }
 func(p *ObserverProcess) Wait()error{
  e:=p.cmd.Wait()
+ // Failed manager wait may be ambiguous (e.g. killed supervisor). Retain
+ // frozen session on failure rather than deleting a potentially live input.
+ if e!=nil{return fmt.Errorf("Observer 启动或退出失败: %w %s；保留会话 %s",e,p.log.b.String(),p.observation.Directory)}
  cleanup:=p.observation.Cleanup()
- if e!=nil{return fmt.Errorf("Observer 启动或退出失败: %w %s",e,p.log.b.String())}
  if cleanup!=nil{return fmt.Errorf("观察会话清理失败: %w",cleanup)}
  return nil
 }

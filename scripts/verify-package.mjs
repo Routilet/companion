@@ -1,0 +1,18 @@
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+const pkg=path.resolve(process.argv[2]);
+const manifest=JSON.parse(await readFile(path.join(pkg,'manifest.json'),'utf8'));
+const meta=JSON.parse(await readFile(path.join(pkg,'package.json'),'utf8'));
+const target=process.platform+'-'+process.arch;
+const entry=manifest.platforms[target];
+if(manifest.schemaVersion!==1||meta.name!=='@routilet/companion'||manifest.version!==meta.version||!entry)throw Error('manifest incompatible');
+const exe=path.join(pkg,entry.executable);
+const digest=createHash('sha256').update(await readFile(exe)).digest('hex');
+if(digest!==entry.sha256)throw Error('manifest digest mismatch');
+const version=execFileSync(exe,['--version'],{encoding:'utf8',timeout:10000}).trim();
+if(version!==manifest.version)throw Error('version mismatch '+version);
+const check=execFileSync(exe,['--check-install'],{encoding:'utf8',timeout:10000}).trim();
+if(check!=='companion '+version+' exam-kit '+meta.dependencies['@routilet/c-exam-kit'])throw Error('installation probe mismatch '+check);
+console.log('Verified native install:',check);

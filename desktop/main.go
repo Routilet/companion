@@ -35,26 +35,19 @@ type Desktop struct{
  drop []string
  prepared *localrun.Submission
  kitPackage string
+ kitError string
  manual *localrun.Manual
- observerPackage string
+ managerPath string
  observerDone chan struct{}
  observerState string
 }
 type Navigation struct { Root string `json:"root"`; Source localrun.Source `json:"source"` }
 func(d *Desktop) nav()Navigation{return Navigation{d.root,d.selected}}
 func(d *Desktop) KitStatus()localrun.KitStatus{
- d.mu.Lock();p:=d.kitPackage;d.mu.Unlock()
+ d.mu.Lock();p,reason:=d.kitPackage,d.kitError;d.mu.Unlock()
+ if reason!=""{return localrun.KitStatus{Path:p,Error:reason}}
  k,e:=localrun.LoadKitPackage(p);if e!=nil{return localrun.KitStatus{Path:p,Error:e.Error()}}
  return localrun.KitStatus{Path:p,Version:k.Version}
-}
-// Temporary developer-preview selector. Routilet resolves the active
-// installation in phase 06; no package discovery/download is implemented here.
-func(d *Desktop) ChooseKit()(localrun.KitStatus,error){
- p,e:=d.native.Dialog.OpenFile().SetTitle("选择已准备的 Exam Kit npm 包目录").CanChooseFiles(false).CanChooseDirectories(true).PromptForSingleSelection()
- if e!=nil||p==""{return d.KitStatus(),e}
- k,e:=localrun.LoadKitPackage(p);if e!=nil{return localrun.KitStatus{},e}
- d.mu.Lock();d.kitPackage=p;d.mu.Unlock()
- return localrun.KitStatus{Path:p,Version:k.Version},nil
 }
 func(d *Desktop) OpenManual()(localrun.Manual,error){
  d.mu.Lock();defer d.mu.Unlock()
@@ -79,20 +72,14 @@ func(d *Desktop) CopyManualExample(id,key,fingerprint string)error{
  return nil
 }
 func(d *Desktop) ObserverStatus()localrun.ObserverInfo{
- d.mu.Lock();p:=d.observerPackage;d.mu.Unlock()
- info,e:=localrun.ProbeObserver(p);if e!=nil{return localrun.ObserverInfo{Error:e.Error()}}
+ d.mu.Lock();p:=d.managerPath;d.mu.Unlock()
+ info,e:=localrun.ProbeManagedObserver(p);if e!=nil{return localrun.ObserverInfo{Error:e.Error()}}
  return info
-}
-func(d *Desktop) ChooseObserver()(localrun.ObserverInfo,error){
- p,e:=d.native.Dialog.OpenFile().SetTitle("选择 Observer 0.2.0 npm 包目录").CanChooseFiles(false).CanChooseDirectories(true).PromptForSingleSelection()
- if e!=nil||p==""{return d.ObserverStatus(),e}
- info,e:=localrun.ProbeObserver(p);if e!=nil{return info,e}
- d.mu.Lock();d.observerPackage=p;d.mu.Unlock();return info,nil
 }
 func(d *Desktop) Observe(compiler,revision string,selection int)error{
  d.mu.Lock();defer d.mu.Unlock()
  if d.running||d.observerDone!=nil||d.selected.Path==""{return errors.New("请先结束当前运行或观察")}
- info,e:=localrun.ProbeObserver(d.observerPackage);if e!=nil{return e}
+ info,e:=localrun.ProbeManagedObserver(d.managerPath);if e!=nil{return e}
  session,e:=localrun.PrepareObservation(d.selected.Path,compiler,revision,selection,info);if e!=nil{return e}
  p,e:=localrun.StartObserver(info,session);if e!=nil{_ = session.Cleanup();return e}
  done:=make(chan struct{});d.observerDone=done;d.observerState="running"
@@ -150,6 +137,7 @@ func(d *Desktop) CopyPrepared(compiler,digest string)error{
 }
 func(d *Desktop) Progress()localrun.Progress{d.mu.Lock();defer d.mu.Unlock();return d.progress}
 
+func(d *Desktop) Version()string{return buildVersion}
 func(d *Desktop) Initial()(Navigation,error){d.mu.Lock();defer d.mu.Unlock();return d.nav(),nil}
 func(d *Desktop) ChooseSource()(Navigation,error){
  d.mu.Lock();if d.running{d.mu.Unlock();return Navigation{},errors.New("请先结束当前运行")};d.mu.Unlock()
@@ -269,8 +257,14 @@ func(d *Desktop) shutdown(){
  // while a debugger may need to clean up the inferior.
  if observerDone!=nil{<-observerDone}
 }
+var buildVersion="0.1.0-beta.1"
 func main(){
- d:=&Desktop{kitPackage:os.Getenv(localrun.KitPreviewEnv),observerPackage:os.Getenv(localrun.ObserverPreviewEnv)}
+ if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
+ if len(os.Args)==2&&os.Args[1]=="--check-install"{p,e:=localrun.ResolveInstalledKit();if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};k,e:=localrun.LoadKitPackage(p);if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
+ kit,e:=localrun.ResolveInstalledKit()
+ d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv)}
+ if e!=nil{d.kitError=e.Error()}
+ if kit==""&&os.Getenv(localrun.KitPreviewEnv)!=""{d.kitPackage=os.Getenv(localrun.KitPreviewEnv);d.kitError=""}
  if path,e:=localrun.SettingsPath();e==nil{d.settingsPath=path;if s,e:=localrun.LoadSettings(path);e==nil{d.settings=s}else{d.settingsError=e.Error()}}else{d.settingsError=e.Error()}
  if len(os.Args)==1&&d.settings.Root!=""{
   if root,e:=localrun.OpenDirectory(d.settings.Root);e==nil{d.root=root;if d.settings.Selected!=""&&!filepath.IsAbs(d.settings.Selected){if p,e:=localrun.Within(root,filepath.Join(root,d.settings.Selected));e==nil{d.selected,_=localrun.Open(p)}}}
@@ -283,6 +277,7 @@ func main(){
   Mac:application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed:true},
   OnShutdown:d.shutdown,
  })
+ if icon,e:=assets.ReadFile("frontend/dist/icons/companion.png");e==nil{app.SetIcon(icon)}
  d.native=app
  win:=app.Window.NewWithOptions(application.WebviewWindowOptions{Title:"Companion",Width:1000,Height:700,URL:"/",EnableFileDrop:true})
  win.OnWindowEvent(events.Common.WindowFilesDropped,func(e *application.WindowEvent){if ctx:=e.Context();ctx!=nil{d.mu.Lock();d.drop=append([]string(nil),ctx.DroppedFiles()...);d.mu.Unlock()}})
