@@ -71,3 +71,24 @@ func TestIntegratedCreateLocationAndBindingGuard(t *testing.T){
  nav,e:=d.Create(other,"fresh.cpp");if e!=nil{t.Fatal(e)}
  if nav.Root!=other||nav.Source.Path!=filepath.Join(other,"fresh.cpp"){t.Fatal(nav)}
 }
+
+func TestArchiveImportAndRepair(t *testing.T){
+ p:=importProblem("5","A");p.Statement="## 输入样例\n    1\n";d,a:=importDesktop(t,p)
+ plan,e:=d.OJPreviewImportAt("fixture",".c",false,d.root);if e!=nil||plan.Plan.Rows[0].Name!=filepath.Join("contest-42","A","A.c"){t.Fatal(plan,e)}
+ r,e:=d.OJApplyImport(plan.Token);if e!=nil||len(r.Completed)!=1{t.Fatal(r,e)}
+ path:=filepath.Join(d.root,"contest-42","A","A.c");doc:=filepath.Join(filepath.Dir(path),"problem.md");raw,e:=os.ReadFile(doc);if e!=nil||len(raw)==0{t.Fatal(e)}
+ if e=os.WriteFile(doc,[]byte("my notes"),0600);e!=nil{t.Fatal(e)}
+ cs,e:=localrun.LoadCases(path);if e!=nil{t.Fatal(e)};if _,e=localrun.SaveCases(path,[]localrun.Case{},cs.Revision);e!=nil{t.Fatal(e)}
+ a.result.Problems[0].Statement="different"
+ plan,e=d.OJPreviewImportAt("fixture",".c",false,d.root);if e!=nil||plan.Plan.Rows[0].Action!="repair"{t.Fatal(plan,e)}
+ r,e=d.OJApplyImport(plan.Token);if e!=nil||len(r.Completed)!=1{t.Fatal(r,e)}
+ cs,e=localrun.LoadCases(path);if e!=nil||len(cs.Cases)!=1{t.Fatal(cs,e)}
+ raw,e=os.ReadFile(doc);if e!=nil||string(raw)!="my notes"{t.Fatal(string(raw),e)}
+ v,e:=d.OJWorkspace();if e!=nil||len(v.Items)!=1||v.Items[0].Path!=path{t.Fatal(v,e)}
+}
+func TestLegacyFlatRepair(t *testing.T){
+ p:=importProblem("5","A");d,a:=importDesktop(t,p);plan,e:=d.OJPreviewImport("fixture",".c",false);if e!=nil{t.Fatal(e)};if _,e=d.OJApplyImport(plan.Token);e!=nil{t.Fatal(e)}
+ path:=filepath.Join(d.root,"A.c");cs,e:=localrun.LoadCases(path);if e!=nil{t.Fatal(e)};if _,e=localrun.SaveCases(path,[]localrun.Case{},cs.Revision);e!=nil{t.Fatal(e)}
+ a.result.Problems[0].Statement="题面";plan,e=d.OJPreviewImportAt("fixture",".c",false,d.root);if e!=nil||plan.Plan.Rows[0].Action!="repair"||plan.Plan.Rows[0].Name!="A.c"{t.Fatal(plan,e)}
+ r,e:=d.OJApplyImport(plan.Token);if e!=nil||len(r.Completed)!=1{t.Fatal(r,e)};if _,e=os.Stat(filepath.Join(d.root,"A.c.md"));e!=nil{t.Fatal(e)}
+}

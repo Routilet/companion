@@ -9,6 +9,9 @@ type JudgeResult struct {
 	ID       string `json:"id"`
 	Result   string `json:"result"`
 	Language string `json:"language"`
+ Score string `json:"score,omitempty"`
+ Detail string `json:"detail,omitempty"`
+ CreatedAt string `json:"createdAt,omitempty"`
 }
 type JudgeStatus struct {
 	AccountID string       `json:"accountId"`
@@ -25,7 +28,7 @@ func (s JudgeStatus) valid(t Target, account, id string) bool {
 		return id == "" && !s.Accepted
 	}
 	r := s.Latest
-	return numberID.MatchString(r.ID) && (id == "" || r.ID == id) && r.Result != "" && validText(r.Result, 128) && validText(r.Language, 128) && (r.Result != "AC" || s.Accepted) && (id == "" || s.Accepted == (r.Result == "AC"))
+	return numberID.MatchString(r.ID) && (id == "" || r.ID == id) && r.Result != "" && validText(r.Result, 128) && validText(r.Language, 128) && validText(r.Score,128) && validText(r.Detail,65536) && validText(r.CreatedAt,128) && (r.Result != "AC" || s.Accepted) && (id == "" || s.Accepted == (r.Result == "AC"))
 }
 func (a *Accounts) Judge(ctx context.Context, t Target, id string) (JudgeStatus, error) {
 	a.mu.Lock()
@@ -42,7 +45,8 @@ func (a *Accounts) Judge(ctx context.Context, t Target, id string) (JudgeStatus,
 		method = "result"
 		p["id"] = id
 	}
-	if e := a.session.Call(ctx, method, p, &s); e != nil {
+	if a.hasMethod(method+"_detail"){method+="_detail"}
+ if e := a.session.Call(ctx, method, p, &s); e != nil {
 		return JudgeStatus{}, a.submitError(e, false)
 	}
 	if !s.valid(t, a.state.ID, id) {
