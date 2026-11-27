@@ -1,4 +1,5 @@
 import {installManual} from "./manual.js";
+import {installDialogs} from "./dialogs.js";
 export {};
 type Source={path:string;directory:string;name:string};
 type Nav={root:string;source:Source};
@@ -21,6 +22,7 @@ type Runtime={Call:{ByName(name:string,...args:unknown[]):Promise<unknown>}};
 let runtime:Runtime|undefined,source:Source|undefined,busy=false,dirty=false,loaded=false,selected=0,revision="missing",cases:Case[]=[],last:Result|undefined;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const btn=(id:string)=>el<HTMLButtonElement>(id);
+const dialogs=installDialogs();
 const input=el<HTMLTextAreaElement>("input"),expected=el<HTMLTextAreaElement>("expected"),compare=el<HTMLInputElement>("compare"),compiler=el<HTMLInputElement>("compiler");
 let root="",expanded=new Set<string>(),treeEntries=new Map<string,Entry[]>(),refreshing=false,navEpoch=0,seenMissing=new Set<string>();
 const compilerByLanguage:Record<string,string>={c:"",cpp:""};
@@ -59,7 +61,7 @@ async function select(nav:Nav){
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
  el("title").textContent=source?.name??"选择一个源文件";el("path").textContent=source?.path??root;el("work").hidden=!source;
  if(source){let dir=source.directory;while(dir&&dir!==root){expanded.add(dir);const next=dir.replace(/[\\/][^\\/]+$/,"");if(next===dir||next.length<root.length)break;dir=next}compiler.value=compilerByLanguage[language(source)];const wasMissing=seenMissing.has(source.path);if(wasMissing)await call("Invalidate",source.path);await reload();
-  if(seenMissing.has(source.path)&&revision!=="missing"){if(!confirm("此路径曾消失，存在旧测试数据。是否继续使用这些样例？")){loaded=false;status.textContent="未确认旧样例；请重新选择文件";}else seenMissing.delete(source.path)}
+  if(seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，存在旧测试数据。是否继续使用这些样例？")){loaded=false;status.textContent="未确认旧样例；请重新选择文件";}else seenMissing.delete(source.path)}
   if(loaded){const cached=await call<Result|null>("Cached",compiler.value.trim());if(cached){if(seenMissing.has(source.path))cached.stale=true;show(cached)}await showOrphans()}
  }
  await refreshTree(true);updateControls();
@@ -67,7 +69,7 @@ async function select(nav:Nav){
 async function showOrphans(){
  const box=el("orphans");box.replaceChildren();if(!source||cases.length||dirty||!loaded)return;
  try{const list=await call<Orphan[]>("Orphans");if(!list.length)return;box.append(node("p","发现未关联的测试数据","muted"));
- for(const o of list){const b=document.createElement("button");b.textContent=o.name+" · "+o.count+" 组 · 恢复";b.onclick=()=>void navigate(async()=>{if(!confirm("复制旧样例到当前文件？原数据保留。"))return;applySet(await call<CaseSet>("Restore",o.name,revision));markStale();await showOrphans()});box.append(b)}
+ for(const o of list){const b=document.createElement("button");b.textContent=o.name+" · "+o.count+" 组 · 恢复";b.onclick=()=>void navigate(async()=>{if(!await dialogs.confirm("复制旧样例到当前文件？原数据保留。"))return;applySet(await call<CaseSet>("Restore",o.name,revision));markStale();await showOrphans()});box.append(b)}
  }catch(e){box.append(node("p",String(e),"muted"))}
 }
 function drawTree(){
@@ -106,8 +108,8 @@ async function refreshTree(force=false){
 }
 async function storeConfig(){try{await call("StoreConfig",compilerByLanguage.c.trim(),compilerByLanguage.cpp.trim(),editorPath.trim())}catch(e){status.textContent="配置保存失败："+String(e)}}
 async function navigate(action:()=>Promise<void>){
- if(busy||dirty&&!confirm("放弃尚未保存的样例修改？"))return;
- busy=true;navEpoch++;updateControls();drawTree();try{await action();await storeConfig()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();drawTree();void refreshTree(true)}
+ if(busy||dialogs.isOpen())return;
+ busy=true;updateControls();drawTree();try{if(dirty&&!await dialogs.confirm("放弃尚未保存的样例修改？","放弃修改"))return;navEpoch++;await action();await storeConfig()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();drawTree();void refreshTree(true)}
 }
 async function save(){if(!dirty)return;applySet(await call<CaseSet>("SaveCases",cases,revision));status.textContent="测试数据已保存";}
 function node(tag:string,text:string,cls=""){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;}
@@ -140,22 +142,21 @@ btn("open").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseSou
 btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseFolder")));
 btn("refreshTree").onclick=()=>void refreshTree(true);
 btn("new").onclick=()=>void navigate(async()=>{
- if(!root)return;const name=prompt("文件名（C 默认引入 Exam Kit，C++ 为普通模板）","A.c");if(!name)return;
+ if(!root)return;const name=await dialogs.name("新建文件","文件名（C 默认引入 Exam Kit，C++ 为普通模板）","A.c","新建");if(!name)return;
  const dir=source?.directory??root;await select(await call<Nav>("Create",dir,name))
 });
-btn("rename").onclick=()=>void navigate(async()=>{if(!source)return;const name=prompt("新文件名",source.name);if(name&&name!==source.name)await select(await call<Nav>("Rename",name))});
-btn("import").onclick=()=>void navigate(async()=>{if(!loaded)return;const append=cases.length>0;if(append&&!confirm("将导入的测试数据追加到现有样例？"))return;const s=await call<CaseSet|null>("Import",revision,append);if(s){applySet(s);markStale();await showOrphans()}});
+btn("rename").onclick=()=>void navigate(async()=>{if(!source)return;const name=await dialogs.name("重命名文件","新文件名",source.name,"重命名");if(name&&name!==source.name)await select(await call<Nav>("Rename",name))});
+btn("import").onclick=()=>void navigate(async()=>{if(!loaded)return;const append=cases.length>0;if(append&&!await dialogs.confirm("将导入的测试数据追加到现有样例？"))return;const s=await call<CaseSet|null>("Import",revision,append);if(s){applySet(s);markStale();await showOrphans()}});
 setInterval(()=>{void refreshTree()},1500);
 setInterval(async()=>{
  if(!runtime)return;
  if(runningTest&&!progressCheck){progressCheck=true;try{const p=await call<Progress>("Progress");if(!runningTest)return;const bar=el<HTMLProgressElement>("progress");if(p.phase==="compiling"){bar.removeAttribute("value");status.textContent="正在编译…"}else if(p.phase==="running"){bar.max=Math.max(1,p.total);bar.value=p.completed;status.textContent="正在运行 "+p.completed+" / "+p.total+" 组"}}catch{}finally{progressCheck=false}}
  if(dropCheck)return;dropCheck=true;
- try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||el<HTMLDialogElement>("manualDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
+ try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||dialogs.isOpen()||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||el<HTMLDialogElement>("manualDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
 },300);
 btn("observe").onclick=async()=>{
  if(busy||observing||!source||!loaded)return;
- if(!confirm("使用当前磁盘源码和选中样例进行独立观察？观察构建使用 -g -O0，不代表之前测试的结果。"))return;
- busy=true;updateControls();try{await save();await call("Observe",compiler.value.trim(),revision,selected);observing=true;el("observerState").textContent="Observer 正在运行；关闭观察窗口后清理会话。"}catch(e){el("observerState").textContent=String(e)}finally{busy=false;updateControls()}
+ busy=true;updateControls();el("observerState").textContent="正在启动 Observer，检查当前源码与样例…";try{await save();await call("Observe",compiler.value.trim(),revision,selected);observing=true;el("observerState").textContent="Observer 正在运行；关闭观察窗口后清理会话。"}catch(e){el("observerState").textContent=String(e)}finally{busy=false;updateControls()}
 };
 setInterval(async()=>{
  if(!observing||observerPolling)return;observerPolling=true;
@@ -163,7 +164,7 @@ setInterval(async()=>{
 },1000);
 function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"Observer 不可用："+o.error:"Observer "+o.version+" · "+o.backend}
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
-const manual=installManual(call,()=>!!runtime&&!busy&&!preview.open&&!config.open);
+const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 btn("openEditor").onclick=async()=>{try{await call("OpenEditor",editorPath.trim());status.textContent="已请求打开编辑器"}catch(e){status.textContent=String(e)}};
 btn("reveal").onclick=async()=>{try{await call("Reveal")}catch(e){status.textContent=String(e)}};
 btn("copy").onclick=async()=>{if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；仍可手动复制。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";preview.showModal()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
@@ -175,9 +176,9 @@ btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage
 btn("closeConfig").onclick=()=>config.close();
 btn("saveConfig").onclick=async()=>{compilerByLanguage.c=el<HTMLInputElement>("cc").value.trim();compilerByLanguage.cpp=el<HTMLInputElement>("cxx").value.trim();editorPath=el<HTMLInputElement>("editorPath").value.trim();if(source)compiler.value=compilerByLanguage[language(source)];markStale();await storeConfig();config.close()};
 compiler.onchange=()=>void storeConfig();
-btn("reload").onclick=()=>void navigate(async()=>{markStale();if(source&&seenMissing.has(source.path))await call("Invalidate",source.path);await reload();if(source&&seenMissing.has(source.path)&&revision!=="missing"){if(!confirm("此路径曾消失，是否继续使用旧样例？")){loaded=false;return}seenMissing.delete(source.path)}await showOrphans()});
+btn("reload").onclick=()=>void navigate(async()=>{markStale();if(source&&seenMissing.has(source.path))await call("Invalidate",source.path);await reload();if(source&&seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，是否继续使用旧样例？")){loaded=false;return}seenMissing.delete(source.path)}await showOrphans()});
 btn("add").onclick=()=>{cases.push({input:"",expected:null});selected=cases.length-1;changes();renderCases()};
-btn("remove").onclick=()=>{if(!confirm("删除当前样例？保存后才会写入磁盘。"))return;cases.splice(selected,1);selected=Math.max(0,Math.min(selected,cases.length-1));changes();renderCases()};
+btn("remove").onclick=async()=>{if(busy||dialogs.isOpen())return;busy=true;updateControls();try{if(!await dialogs.confirm("删除当前样例？保存后才会写入磁盘。","删除"))return;cases.splice(selected,1);selected=Math.max(0,Math.min(selected,cases.length-1));changes()}catch(e){status.textContent=String(e)}finally{busy=false;renderCases()}};
 input.oninput=()=>{if(cases[selected]){cases[selected].input=input.value;changes()}};
 expected.oninput=()=>{if(cases[selected]){cases[selected].expected=expected.value;changes()}};
 compare.onchange=()=>{if(cases[selected]){cases[selected].expected=compare.checked?expected.value:null;changes();renderCases()}};
@@ -186,7 +187,7 @@ btn("save").onclick=async()=>{busy=true;updateControls();try{await save()}catch(
 btn("run").onclick=()=>void run(false);btn("all").onclick=()=>void run(true);
 btn("cancel").onclick=async()=>{btn("cancel").disabled=true;try{await call("Cancel")}catch(e){status.textContent=String(e)}};
 window.addEventListener("focus",async()=>{if(last&&!busy&&!dirty){const id=last.runId;try{if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id)markStale()}catch{markStale()}}});
-document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&source&&!preview.open&&!config.open&&!manual.isOpen()){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!manual.isOpen()&&!preview.open&&!config.open&&!busy){e.preventDefault();void manual.open()}});
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!manual.isOpen()){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!busy){e.preventDefault();void manual.open()}});
 window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
 async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;status.textContent="请选择 C/C++ 文件";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
 void boot();

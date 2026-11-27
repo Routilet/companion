@@ -13,3 +13,7 @@ CI 验证真实发行资产和安装清单；实际管理器启动、中文路�
 ## 首次测试版授权
 
 维护者明确批准合并并发布 0.1.0-beta.1 供真机验收。release.yml 增加仅该版本的 main push 自动发布条件；必须经过双平台构建与安装验证，推送 next，不变更 latest，已存在版本不重复发布或改标签。其他版本仍需 main 手动勾选 publish。此条件不是常规正式版自动发布策略。
+
+## beta.2 交互回归
+
+新建、重命名等改用应用内部 HTML dialog，移除所有浏览器原生 prompt/confirm。观察按钮直接启动，立即显示进度，保留真实后端错误。新增实际前端的 Chromium 自动交互回归（模拟 Wails RPC）；实际系统 WebView 和 Observer GUI 仍需双平台验收。beta.2 尚未发行。
