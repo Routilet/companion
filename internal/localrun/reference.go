@@ -112,6 +112,9 @@ func manualKit(path,packageRoot string)(Kit,string,error){
  }
  k,e:=LoadKitPackage(packageRoot);return k,"installed",e
 }
+func LoadSnapshotManual(path string)(Manual,bool,error){
+ k,origin,e:=manualKit(path,"");if origin!="snapshot"{return Manual{},false,nil};if e!=nil{return Manual{},true,e};r,e:=ParseReference(k.Files["reference.json"],k.Version);if e!=nil{return Manual{},true,e};return Manual{Reference:r,Origin:origin,Fingerprint:k.Fingerprint,SourcePath:path},true,nil
+}
 func LoadManual(path,packageRoot string)(Manual,error){
  k,origin,e:=manualKit(path,packageRoot);if e!=nil{return Manual{},e}
  r,e:=ParseReference(k.Files["reference.json"],k.Version);if e!=nil{return Manual{},e}

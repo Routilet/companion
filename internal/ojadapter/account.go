@@ -206,13 +206,6 @@ func (a *Accounts) login(ctx context.Context, c credentials, remember bool) (Acc
 	if remember && !a.store.Supported() {
 		return a.view(), errCredentialStore
 	}
-	// Clear previous identity and its saved credential before switching. If the
-	// keychain cannot be cleared, do not start a different account session.
-	if a.store.Supported() {
-		if e := a.store.Delete(); e != nil && !errors.Is(e, errNoCredential) {
-			return a.view(), errCredentialStore
-		}
-	}
 	a.reset()
 	if err := a.ensure(ctx); err != nil {
 		return a.view(), err
@@ -223,12 +216,12 @@ func (a *Accounts) login(ctx context.Context, c credentials, remember bool) (Acc
 	v := a.view()
 	if remember {
 		if e := a.store.Save(c); e != nil {
-			v.Warning = "已登录，但系统凭据保存失败"
+			v.Warning = "已登录，但系统凭据保存失败；请检查系统凭据库"
 		} else {
 			v.Saved = true
 			a.saved = true
 		}
-	}
+	} else if a.store.Supported(){if e:=a.store.Delete();e!=nil&&!errors.Is(e,errNoCredential){v.Warning="已登录，但旧保存凭据清除失败，请重试注销或检查系统凭据库"}}
 	return v, nil
 }
 func (a *Accounts) Login(ctx context.Context, user, password string, remember bool) (AccountView, error) {
@@ -253,9 +246,8 @@ func (a *Accounts) Restore(ctx context.Context) (AccountView, error) {
 		return a.view(), errCredentialStore
 	}
 	c, e := a.store.Load()
-	if e != nil {
-		return a.view(), errors.New("未找到可用的已保存凭据")
-	}
+	if errors.Is(e,errNoCredential){return a.view(),nil};if e!=nil{return a.view(),errors.New("无法读取系统凭据，请手动登录")}
+	if a.state.State=="signed_in"&&a.verified{return a.view(),nil}
 	a.reset()
 	if e = a.ensure(ctx); e != nil {
 		return a.view(), e

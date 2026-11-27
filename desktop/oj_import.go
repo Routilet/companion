@@ -112,6 +112,7 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 		return out, e
 	}
 	var first localrun.Source
+ packageRoot:="";cleanup:=func(){};for _,row:=range p.Rows{if row.Action=="create"&&strings.EqualFold(filepath.Ext(row.Name),".c"){var err error;packageRoot,cleanup,err=d.installedKit();if err!=nil{packageRoot=""};break}};defer cleanup()
 	for _, row := range p.Rows {
 		if row.Action == "skip" {
 			out.Skipped = append(out.Skipped, row.Name)
@@ -127,7 +128,7 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 		if row.Action == "create" {
 			dir:=filepath.Dir(path)
    if p.Archive{e=ensureImportDir(d.root,p.Directory,dir)}
-   if e==nil{s, e = localrun.CreateSourceWithKit(d.root, dir, filepath.Base(path), d.kitPackage)}
+   if e==nil{s, e = localrun.CreateSourceWithKit(d.root, dir, filepath.Base(path), packageRoot)}
 		} else {
 			if _, e = localrun.Within(d.root, path); e == nil {
 				s, e = localrun.Open(path)
