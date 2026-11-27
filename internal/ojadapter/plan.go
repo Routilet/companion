@@ -27,6 +27,8 @@ type Plan struct {
 	AccountID string    `json:"-"`
 	Attach    string    `json:"-"`
  Archive bool `json:"-"`
+ FolderName string `json:"folderName,omitempty"`
+ CanRename bool `json:"canRename,omitempty"`
 }
 
 // CaseRevision is supplied by the existing Companion case store for an existing source.

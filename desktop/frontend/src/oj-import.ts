@@ -1,6 +1,6 @@
 type Call = <T>(method:string,...args:unknown[])=>Promise<T>;
 type Row={name:string;title:string;action:"create"|"attach"|"repair"|"skip";samples:number;warnings:string[];document?:string};
-type Preview={token:string;plan:{title:string;directory:string;rows:Row[]}};
+type Preview={token:string;plan:{title:string;directory:string;rows:Row[];folderName?:string;canRename?:boolean}};
 type Binding={title:string;label:string;sourceUrl:string;target:{kind:string}};
 type Apply<T>={nav:T;completed:string[];skipped:string[];failed:string[]};
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
@@ -23,8 +23,11 @@ export function installOJImport<T>(call:Call){
   btn("ojChooseDestination").onclick=async()=>{try{const p=await call<string>("ChooseCreateDirectory");if(p&&dialog.open){destination=p;el("ojDestination").textContent=p}}catch(e){el("ojRecentNotice").textContent=String(e)}};
   recent.onchange=()=>{if(recent.value)url.value="https://accoding.buaa.edu.cn/contest-ng/index.html#/"+recent.value};url.oninput=()=>{recent.value=""};btn("ojMoreContests").onclick=()=>{void call("OJOpenContestList").catch(e=>{el("ojRecentNotice").textContent=String(e)})};
   const confirmed=modal(dialog);void call<{id:string;title:string;start:string;status:string}[]>("OJRecentContests").then(rows=>{if(!dialog.open)return;for(const r of rows??[])recent.append(new Option(r.start.slice(0,10)+" · "+r.title+" · "+r.status,r.id));el("ojRecentNotice").textContent=rows?.length?"":"未找到近期比赛，可手动输入链接"}).catch(()=>{if(dialog.open)el("ojRecentNotice").textContent="列表暂不可用，仍可手动输入链接"});
-  if(!await confirmed)return null;const p=await call<Preview>("OJPreviewImportAt",url.value,lang.value,attach.checked,destination);el("ojPreviewTitle").textContent=p.plan.title;el("ojPreviewDir").textContent=p.plan.directory;
-  const list=el("ojPreviewRows");list.replaceChildren();let count=0;for(const row of p.plan.rows){const item=document.createElement("li");const action=row.action==="create"?"新建":row.action==="attach"?"关联":row.action==="repair"?"补充":"跳过";if(row.action!=="skip")count++;item.textContent=`${action} ${row.name} · ${row.title} · ${row.samples} 组样例${row.document?" · "+row.document:""}${row.warnings.length?" · "+row.warnings.join("；"):""}`;list.append(item)}btn("ojPreviewConfirm").disabled=count===0;if(!await modal(preview))return null;return await call<Apply<T>>("OJApplyImport",p.token)
+  if(!await confirmed)return null;let p=await call<Preview>("OJPreviewImportAt",url.value,lang.value,attach.checked,destination);const folder=el<HTMLInputElement>("ojFolderName"),field=el("ojFolderField"),error=el("ojFolderError");let replanBusy=false;field.hidden=!p.plan.canRename;folder.value=p.plan.folderName??"";folder.disabled=false;error.textContent="";el("ojPreviewTitle").textContent=p.plan.title;el("ojPreviewDir").textContent=p.plan.directory;
+  function drawPlan(){const list=el("ojPreviewRows");list.replaceChildren();let count=0;for(const row of p.plan.rows){const item=document.createElement("li");const action=row.action==="create"?"新建":row.action==="attach"?"关联":row.action==="repair"?"补充":"跳过";if(row.action!=="skip")count++;item.textContent=`${action} ${row.name} · ${row.title} · ${row.samples} 组样例${row.document?" · "+row.document:""}${row.warnings.length?" · "+row.warnings.join("；"):""}`;list.append(item)}btn("ojPreviewConfirm").disabled=count===0||replanBusy||(!field.hidden&&folder.value!==p.plan.folderName)}drawPlan();
+  folder.oninput=()=>{error.textContent="";btn("ojPreviewConfirm").disabled=folder.value!==p.plan.folderName};
+  folder.onchange=async()=>{if(replanBusy||folder.value===p.plan.folderName)return;replanBusy=true;folder.disabled=true;btn("ojPreviewConfirm").disabled=true;try{const next=await call<Preview>("OJReplanImport",p.token,folder.value);if(preview.open){p=next;folder.value=p.plan.folderName??"";field.hidden=!p.plan.canRename;error.textContent=""}}catch(e){if(preview.open)error.textContent=String(e)}finally{replanBusy=false;folder.disabled=false;drawPlan()}};
+  if(!await modal(preview)||replanBusy||(!field.hidden&&folder.value!==p.plan.folderName))return null;return await call<Apply<T>>("OJApplyImport",p.token)
  }
  return {refresh,run};
 }

@@ -29,6 +29,8 @@ type ojAccountService interface {
 type ojPending struct {
 	root, token string
 	plan        ojadapter.Plan
+ result ojadapter.ImportResult
+ ext string
 }
 type OJPreview struct {
 	Token string         `json:"token"`
@@ -90,7 +92,7 @@ func (d *Desktop) ojPreviewImport(link, ext string, attach bool, destination str
 		return OJPreview{}, e
 	}
 	token := fmt.Sprint(seq)
-	d.ojPending = &ojPending{root, token, p}
+	d.ojPending = &ojPending{root:root,token:token,plan:p,result:result,ext:ext}
 	return OJPreview{token, p}, nil
 }
 func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
