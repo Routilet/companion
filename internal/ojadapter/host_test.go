@@ -119,7 +119,7 @@ func TestRealAdapter(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
-	if c := s.Capabilities(); len(c.Methods) != 6 || c.Methods[0] != "capabilities" {
+	if c := s.Capabilities(); len(c.Methods) != 9 || c.Methods[0] != "capabilities" {
 		t.Fatal(c)
 	}
 	var link struct {
@@ -134,7 +134,7 @@ func TestRealAdapter(t *testing.T) {
 	if e = s.Call(context.Background(), "import", map[string]string{"url": "https://accoding.buaa.edu.cn/problem/42/index"}, nil); !errors.As(e, &re) || re.Code != "auth" {
 		t.Fatal(e)
 	}
-	if e = s.Call(context.Background(), "submit", nil, nil); !errors.As(e, &re) || re.Code != "method_not_found" {
+	if e = s.Call(context.Background(), "submit", nil, nil); !errors.As(e, &re) || re.Code != "invalid_params" {
 		t.Fatal(e)
 	}
 }

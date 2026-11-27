@@ -1,3 +1,4 @@
+import {installOJSubmit} from "./oj-submit.js";
 import {installOJImport} from "./oj-import.js";
 import {installOJAccount} from "./oj-account.js";
 import {installManual} from "./manual.js";
@@ -234,10 +235,11 @@ function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.e
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
 const ojAccount=installOJAccount(call,config);
 const ojImport=installOJImport<Nav>(call);
+const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message});
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 btn("openEditor").onclick=async()=>{try{await call("OpenEditor",editorPath.trim());status.textContent="已请求打开编辑器"}catch(e){status.textContent=String(e)}};
 btn("reveal").onclick=async()=>{try{await call("Reveal")}catch(e){status.textContent=String(e)}};
-btn("copy").onclick=async()=>{if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；仍可手动复制。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";preview.showModal()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
+btn("copy").onclick=async()=>{if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；请核对后再复制或提交。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";el("previewTitle").textContent="复制提交源码";preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest)}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};

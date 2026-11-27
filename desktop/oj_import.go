@@ -13,6 +13,9 @@ import (
 type ojAccountService interface {
  Status() ojadapter.AccountView
  Import(context.Context,string)(ojadapter.ImportResult,error)
+ PrepareOnline(context.Context,ojadapter.Target,string)(ojadapter.SubmitPlan,error)
+ SubmitOnline(context.Context,ojadapter.SubmitPlan,string,string)(ojadapter.Receipt,error)
+ ReconcileOnline(context.Context,string)(ojadapter.Reconciliation,error)
  Login(context.Context,string,string,bool)(ojadapter.AccountView,error)
  Restore(context.Context)(ojadapter.AccountView,error)
  Refresh(context.Context)(ojadapter.AccountView,error)

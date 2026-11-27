@@ -22,6 +22,7 @@ var assets embed.FS
 type Desktop struct{
  accounts ojAccountService
  ojPending *ojPending
+ ojSubmit *ojSubmissionPending
  ojSequence uint64
  native *application.App
  mu sync.Mutex
@@ -131,6 +132,7 @@ func(d *Desktop) Reveal()error{
 }
 func(d *Desktop) Prepare(compiler string)(localrun.Submission,error){
  d.mu.Lock();defer d.mu.Unlock()
+ d.ojSubmit=nil;d.prepared=nil
  if d.running||d.selected.Path==""{return localrun.Submission{},errors.New("当前不能复制")}
  var last *localrun.BatchResult
  if r,ok:=d.last[d.selected.Path];ok{last=&r}
