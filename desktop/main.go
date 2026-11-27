@@ -11,6 +11,7 @@ import (
  "sync"
 
  "github.com/Routilet/companion/internal/localrun"
+ "github.com/Routilet/companion/internal/ojadapter"
  "github.com/wailsapp/wails/v3/pkg/application"
  "github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -19,6 +20,7 @@ import (
 var assets embed.FS
 
 type Desktop struct{
+ accounts *ojadapter.Accounts
  native *application.App
  mu sync.Mutex
  selected localrun.Source
@@ -90,6 +92,11 @@ func(d *Desktop) Observe(compiler,revision string,selection int)error{
  return nil
 }
 func(d *Desktop) ObservationState()string{d.mu.Lock();defer d.mu.Unlock();return d.observerState}
+func(d *Desktop) OJAccountStatus() ojadapter.AccountView { return d.accounts.Status() }
+func(d *Desktop) OJLogin(username,password string,remember bool)(ojadapter.AccountView,error){return d.accounts.Login(context.Background(),username,password,remember)}
+func(d *Desktop) OJRestore()(ojadapter.AccountView,error){return d.accounts.Restore(context.Background())}
+func(d *Desktop) OJRefresh()(ojadapter.AccountView,error){return d.accounts.Refresh(context.Background())}
+func(d *Desktop) OJLogout()(ojadapter.AccountView,error){return d.accounts.Logout()}
 func(d *Desktop) Config()(localrun.Settings,error){d.mu.Lock();defer d.mu.Unlock();return d.settings,nil}
 func(d *Desktop) ConfigWarning()string{d.mu.Lock();defer d.mu.Unlock();return d.settingsError}
 func(d *Desktop) StoreConfig(c,cpp,editor string)error{
@@ -251,6 +258,7 @@ func(d *Desktop) IsCurrent(compiler string)(bool,error){
 }
 func(d *Desktop) Cancel(){d.mu.Lock();defer d.mu.Unlock();if d.cancel!=nil{d.cancel()}}
 func(d *Desktop) shutdown(){
+ if d.accounts!=nil{d.accounts.Close()}
  d.mu.Lock();if d.cancel!=nil{d.cancel()};done:=d.done;observerDone:=d.observerDone;d.mu.Unlock()
  if done!=nil{<-done}
  // Keep session files alive until Observer exits normally. Never kill its GUI
@@ -262,7 +270,7 @@ func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
  if len(os.Args)==2&&os.Args[1]=="--check-install"{p,e:=localrun.ResolveInstalledKit();if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};k,e:=localrun.LoadKitPackage(p);if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
  kit,e:=localrun.ResolveInstalledKit()
- d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv)}
+ d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewAccounts(os.Getenv(ojadapter.AccountPreviewEnv))}
  if e!=nil{d.kitError=e.Error()}
  if kit==""&&os.Getenv(localrun.KitPreviewEnv)!=""{d.kitPackage=os.Getenv(localrun.KitPreviewEnv);d.kitError=""}
  if path,e:=localrun.SettingsPath();e==nil{d.settingsPath=path;if s,e:=localrun.LoadSettings(path);e==nil{d.settings=s}else{d.settingsError=e.Error()}}else{d.settingsError=e.Error()}
