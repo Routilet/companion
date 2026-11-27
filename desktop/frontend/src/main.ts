@@ -25,6 +25,8 @@ const btn=(id:string)=>el<HTMLButtonElement>(id);
 const dialogs=installDialogs();
 const input=el<HTMLTextAreaElement>("input"),expected=el<HTMLTextAreaElement>("expected"),compare=el<HTMLInputElement>("compare"),compiler=el<HTMLInputElement>("compiler");
 const expansionByRoot=new Map<string,Set<string>>();
+function restoreExpansion(path:string):string[]{try{const v=JSON.parse(localStorage.getItem("companion.expanded")??"null");return v?.root===path&&Array.isArray(v.paths)?v.paths.filter((p:unknown)=>typeof p==="string").slice(0,128):[]}catch{return []}}
+function rememberExpansion(){try{if(root)localStorage.setItem("companion.expanded",JSON.stringify({root,paths:[...expanded].slice(0,128)}))}catch{/* optional UI state */}}
 let root="",expanded=new Set<string>(),treeEntries=new Map<string,Entry[]>(),refreshing=false,navEpoch=0,seenMissing=new Set<string>();
 const compilerByLanguage:Record<string,string>={c:"",cpp:""};
 let observing=false,observerPolling=false,rawResult=false;
@@ -69,7 +71,7 @@ async function reload(){loaded=false;updateControls();try{applySet(await call<Ca
 async function select(nav:Nav){
  if(!nav.root)return;
  navEpoch++;
- if(root!==nav.root){if(root)expansionByRoot.set(root,new Set(expanded));root=nav.root;expanded=new Set(expansionByRoot.get(root)??[root]);treeEntries.clear();seenMissing.clear()}
+ if(root!==nav.root){if(root)expansionByRoot.set(root,new Set(expanded));root=nav.root;expanded=new Set(expansionByRoot.get(root)??[root,...restoreExpansion(root)]);treeEntries.clear();seenMissing.clear()}
  el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
  el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
@@ -122,7 +124,7 @@ function drawTree(){
  }
  if(root)branch(root,host,0);else host.replaceChildren();
  for(const [path,n] of fileNodes)if(!seen.has(path)){n.wrap.remove();fileNodes.delete(path)}
- host.scrollTop=scroll;
+ host.scrollTop=scroll;rememberExpansion();
 }
 async function locateFile(){
  if(!source)return;let dir=source.directory;
@@ -261,18 +263,18 @@ const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("con
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");
-let editorChoices:EditorOption[]=[];
+let editorChoices:EditorOption[]=[];let editorEpoch=0;
 function editorLabel(){return editorPath==="@system"?"系统默认编辑器":editorChoices.find(e=>e.path===editorPath)?.name??editorPath.split(/[\\/]/).at(-1)?.replace(/\.(exe|app)$/i,"")??""}
 function updateEditorLabel(){btn("openEditor").textContent=editorPath?"打开 · "+editorLabel():"打开编辑器"}
 async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="已请求打开 "+editorLabel();return true}catch(e){status.textContent=String(e);return false}}
 async function editorMenu(openAfter:boolean){
  if(busy||!source||editorDialog.open)return;
- editorDialog.showModal();const choices=el("editorChoices"),hint=el("editorHint");choices.replaceChildren();hint.textContent="正在检测本机代码编辑器…";
+ const epoch=++editorEpoch;editorDialog.showModal();const choices=el("editorChoices"),hint=el("editorHint");choices.replaceChildren();hint.textContent="正在检测本机代码编辑器…";
  async function pick(path:string){editorDialog.close();if(openAfter)await launchEditor(path);else{editorPath=path;updateEditorLabel();await storeConfig()}}
  btn("editorClose").onclick=()=>editorDialog.close();
  btn("editorSystem").onclick=()=>void pick("@system");
- btn("editorCustom").onclick=async()=>{try{const p=await call<string>("ChooseEditor");if(p&&editorDialog.open)await pick(p)}catch(e){hint.textContent=String(e)}};
- try{editorChoices=await call<EditorOption[]>("DetectEditors")??[];if(!editorDialog.open)return;
+ btn("editorCustom").onclick=async()=>{try{const p=await call<string>("ChooseEditor");if(p&&editorDialog.open&&epoch===editorEpoch)await pick(p)}catch(e){hint.textContent=String(e)}};
+ try{const detected=await call<EditorOption[]>("DetectEditors")??[];if(!editorDialog.open||epoch!==editorEpoch)return;editorChoices=detected;
  hint.textContent=editorChoices.length?"选择代码编辑器，之后可以随时切换。":"未检测到代码编辑器，请手动选择。";
  for(const e of editorChoices){const b=node("button",e.name+(e.path===editorPath?" ✓":""),"editor-choice") as HTMLButtonElement;b.title=e.path;b.onclick=()=>void pick(e.path);choices.append(b)}
  if(openAfter&&!editorPath&&editorChoices.length===1)await pick(editorChoices[0].path);

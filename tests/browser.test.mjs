@@ -50,6 +50,9 @@ async function setup(t){
    case 'Invalidate':case 'StoreConfig':return;
    case 'ChooseCreateDirectory':return '/other';
    case 'DetectEditors':return [{name:'VS Code',path:'/apps/code'}];
+   case 'OpenManual':return {origin:'installed',fingerprint:'fixture-v1',reference:{version:'0.6.10',notes:'## 使用约定\n- 示例',sections:[{title:'输入与输出',entries:['read_number']}],categories:[{title:'数字读写',entries:[{id:'read_number',title:'读取数字',description:'读取一个整数。',example:'int a = read_int();',signatures:['int read_int(void);']}]}]}};
+   case 'SearchManual':return [{id:'read_number',category:'数字读写'}];
+   case 'CopyManualSignature':case 'CopyManualExample':return;
    case 'OpenEditor':return;
    case 'Create':
     if(state.failCreate)throw Error('文件已存在');
@@ -168,4 +171,21 @@ test('explicit new location and editor detection do not depend on system default
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='Create').length),0);
  await p.locator('#openEditor').click();await p.waitForFunction(()=>document.querySelector('#openEditor').textContent.includes('VS Code'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='OpenEditor')),['OpenEditor','/apps/code']);
+});
+
+test('manual preserves version-scoped reading state and copies a signature',async t=>{
+ const p=await setup(t);
+ await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);
+ await p.locator('#manualNav summary').click();await p.locator('#manualNav [data-entry]').click();
+ assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
+ assert.ok(await p.locator('#manualDetail .syntax-keyword').count()>0);
+ await p.getByRole('button',{name:'复制函数接口'}).click();
+ await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='CopyManualSignature'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='CopyManualSignature')),['CopyManualSignature','read_number','','fixture-v1','int read_int(void);']);
+ await p.locator('#manualClose').click();await p.locator('#manualBtn').click();
+ await p.waitForFunction(()=>document.querySelector('#manualDetail h2')?.textContent==='读取数字'&&!document.querySelector('#manualSearch').disabled);
+ assert.equal(await p.locator('#manualNav details').getAttribute('open'),'');
+ await p.locator('#manualSearch').fill('读取');await p.waitForFunction(()=>document.querySelector('#manualNav [data-entry] small'));
+ await p.locator('#manualSearch').press('ArrowDown');await p.locator('#manualSearch').press('Enter');
+ assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
 });

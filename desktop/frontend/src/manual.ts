@@ -76,7 +76,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
   if(example){
    const row=node("div","","manualHead");row.append(node("h3","调用示例"));
    const fp=model.fingerprint,selectedKey=currentKey;
-   const copy=button("复制示例",()=>{copy.disabled=true;void call("CopyManualExample",id,selectedKey,fp).then(()=>setStatus("已复制完整示例")).catch(err=>setStatus(String(err))).finally(()=>{copy.disabled=false})});
+   const copy=button("复制示例",()=>{copy.disabled=true;void call("CopyManualExample",id,selectedKey,fp).then(()=>{copy.textContent="已复制";setTimeout(()=>{copy.textContent="复制示例"},1200)}).catch(err=>setStatus(String(err))).finally(()=>{copy.disabled=false})});
    row.append(copy);detail.append(row,codeBlock(example))
   }
   if(advanced.length){const more=document.createElement("details");more.append(node("summary","扩展接口 · 显式容量"),codeBlock(advanced.join("\n")));detail.append(more)}
@@ -87,11 +87,12 @@ export function installManual(call:Call,canOpen:()=>boolean){
   const e=entries.get(id);if(!e)return node("span",id);
   const b=button(e.title,()=>{trail=[];show(id,key)});b.dataset.entry=id;b.title=category||e.id;if(category){const v=e.variants?.find(v=>v.key===key);b.append(node("small",v?.symbols.join(" · ")??e.id),node("small",category))}return b
  }
+ function categoryPage(n:Section){current="";currentKey="";trail=[];highlight();detail.replaceChildren(node("h2",n.title),node("p","选择所需操作，查看函数接口与示例。","muted"));const walk=(s:Section)=>{if(s!==n)detail.append(node("h3",s.title));for(const id of s.entries??[]){const e=entries.get(id);if(!e)continue;const b=button(e.title,()=>show(id));b.className="category-entry";const brief=e.description.split(/\r?\n/).find(l=>l.trim()&&!l.startsWith("#"))??"";b.append(node("small",brief.slice(0,120)));detail.append(b)}for(const child of s.children??[])walk(child)};walk(n);detail.scrollTop=0}
  function tree(){
   if(!model)return;nav.replaceChildren(button("使用约定",notes));
   function section(n:Section,key:string):HTMLElement{
    const d=document.createElement("details");d.dataset.section=key;d.open=openSections.has(key);
-   const summary=node("summary",n.title);d.append(summary);d.ontoggle=()=>{if(!d.isConnected)return;if(d.open)openSections.add(key);else openSections.delete(key)};
+   const summary=node("summary",n.title);summary.onclick=()=>{if(!d.open)categoryPage(n)};d.append(summary);d.ontoggle=()=>{if(!d.isConnected)return;if(d.open)openSections.add(key);else openSections.delete(key)};
    const items=node("div","","manualBranch");
    for(const [i,child] of (n.children??[]).entries())items.append(section(child,key+"/"+i));
    for(const id of n.entries??[])items.append(entryButton(id));d.append(items);return d
@@ -104,7 +105,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
   keyboardIndex=-1;if(!q){tree();return}
   try{const hits=await call<Hit[]>("SearchManual",q);if(epoch!==queryEpoch||session!==generation||!dialog.open)return;
    nav.replaceChildren(node("p",hits.length+" 项结果","muted"));
-   for(const h of hits)nav.append(entryButton(h.id,h.variant,h.category));highlight();
+   keyboardIndex=-1;for(const h of hits)nav.append(entryButton(h.id,h.variant,h.category));highlight();
   }catch(e){if(epoch===queryEpoch&&session===generation)setStatus(String(e))}
  }
  async function open(){
