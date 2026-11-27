@@ -6,7 +6,7 @@ Routilet 的文件优先 C/C++ 编程辅助工具。普通源文件和文件夹�
 
 ## 测试版
 
-当前候选版本 0.1.0-beta.3，面向 Windows 11 x64 和 Apple Silicon macOS 12+（系统 WebView）。通过 Routilet 0.1.6 或兼容新版的测试通道安装 `@routilet/companion`；在线功能另行安装并启用 `@routilet/accoding-adapter` 0.1.0-beta.1。Exam Kit 0.6.10 为固定依赖，Observer 独立可选。没有 Adapter 或网络仍可使用本地功能，不自动登录或下载。在线提交必须明确确认，结果不确定时不要直接重发。
+当前候选版本 0.1.0-beta.4，面向 Windows 11 x64 和 Apple Silicon macOS 12+（系统 WebView）。通过 Routilet 0.1.7 或兼容新版的测试通道安装 `@routilet/companion`；在线功能另行安装并启用 `@routilet/accoding-adapter` 0.1.0-beta.1。Exam Kit 由 Routilet 独立安装、更新，Companion 每次启动获取当前已启用资源副本；已有工作区快照不变。未安装时仍可使用普通文件的本地功能。Observer 独立可选。没有 Adapter 或网络仍可使用本地功能，不自动登录或下载。在线提交必须明确确认，结果不确定时不要直接重发。
 
 测试版真实 Accoding 平台与实际 WebView 尚待用户验收，不宣称正式稳定版。不迁移旧课程数据，不更改旧 npm 包。请遵守课程考试规定；运行可信源码，本地运行不是沙箱。
 

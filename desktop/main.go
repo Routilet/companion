@@ -319,11 +319,11 @@ func(d *Desktop) shutdown(){
 var buildVersion="0.1.0-beta.3"
 func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
- if len(os.Args)==2&&os.Args[1]=="--check-install"{p,e:=localrun.ResolveInstalledKit();if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};k,e:=localrun.LoadKitPackage(p);if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
- kit,e:=localrun.ResolveInstalledKit()
+ if len(os.Args)==2&&os.Args[1]=="--check-install"{p,cleanup,e:=localrun.ResolveSessionKit(os.Getenv(localrun.RoutiletExecutableEnv));if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};defer cleanup();k,e:=localrun.LoadKitPackage(p);if e!=nil{cleanup();fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
+ kit,cleanup,e:=localrun.ResolveSessionKit(os.Getenv(localrun.RoutiletExecutableEnv))
+ defer cleanup()
  d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewManagedAccounts(os.Getenv(localrun.RoutiletExecutableEnv),os.Getenv(ojadapter.AccountPreviewEnv))}
  if e!=nil{d.kitError=e.Error()}
- if kit==""&&os.Getenv(localrun.KitPreviewEnv)!=""{d.kitPackage=os.Getenv(localrun.KitPreviewEnv);d.kitError=""}
  if path,e:=localrun.SettingsPath();e==nil{d.settingsPath=path;if s,e:=localrun.LoadSettings(path);e==nil{d.settings=s}else{d.settingsError=e.Error()}}else{d.settingsError=e.Error()}
  if len(os.Args)==1&&d.settings.Root!=""{
   if root,e:=localrun.OpenDirectory(d.settings.Root);e==nil{d.root=root;if d.settings.Selected!=""&&!filepath.IsAbs(d.settings.Selected){if p,e:=localrun.Within(root,filepath.Join(root,d.settings.Selected));e==nil{d.selected,_=localrun.Open(p)}}}
@@ -340,5 +340,5 @@ func main(){
  d.native=app
  win:=app.Window.NewWithOptions(application.WebviewWindowOptions{Title:"Companion",Width:1000,Height:700,URL:"/",EnableFileDrop:true})
  win.OnWindowEvent(events.Common.WindowFilesDropped,func(e *application.WindowEvent){if ctx:=e.Context();ctx!=nil{d.mu.Lock();d.drop=append([]string(nil),ctx.DroppedFiles()...);d.mu.Unlock()}})
- if e:=app.Run();e!=nil{log.Fatal(e)}
+ if e:=app.Run();e!=nil{cleanup();log.Fatal(e)}
 }
