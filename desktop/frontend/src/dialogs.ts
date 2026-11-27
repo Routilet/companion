@@ -27,14 +27,14 @@ export function installDialogs(){
    function submit(e:Event){
     e.preventDefault();
     const value=named?input.value:"yes";
-    if(place&&!place.value)return;
+    if(place&&(!place.value||browse.disabled))return;
     if(named&&!value.trim()){input.focus();return}
     submitted=value;dialog.close("accept");
    }
    function dismiss(){submitted=null;dialog.close("cancel")}
-   function escape(e:Event){e.preventDefault();dismiss()}
+   function escape(e:Event){e.preventDefault();if(!browse.disabled)dismiss()}
    function closed(){const value=dialog.returnValue==="accept"?submitted:null;cleanup();resolve(value)}
-   if(place)browse.onclick=async()=>{browse.disabled=true;accept.disabled=true;try{const chosen=await place.choose();if(chosen&&dialog.open){place.value=chosen;directory.textContent=chosen;directory.title=chosen}}catch(e){message.textContent=String(e)}finally{browse.disabled=false;accept.disabled=!place.value}};
+   if(place)browse.onclick=async()=>{browse.disabled=true;accept.disabled=true;cancel.disabled=true;try{const chosen=await place.choose();if(chosen&&dialog.open){place.value=chosen;directory.textContent=chosen;directory.title=chosen}}catch(e){message.textContent=String(e)}finally{browse.disabled=false;cancel.disabled=false;accept.disabled=!place.value}};
    form.addEventListener("submit",submit);cancel.addEventListener("click",dismiss);
    dialog.addEventListener("close",closed);dialog.addEventListener("cancel",escape);
    try{dialog.showModal();if(named){input.focus();input.select()}else cancel.focus()}

@@ -134,6 +134,9 @@ func(d *Desktop) OpenEditor(editor string)error{
  d.mu.Lock();p:=d.selected.Path;d.mu.Unlock()
  return localrun.OpenEditor(p,editor)
 }
+func(d *Desktop) CreateFolder(dir,name string)(string,error){
+ d.mu.Lock();defer d.mu.Unlock();if d.running{return "",errors.New("正在运行")};return localrun.CreateFolder(d.root,dir,name)
+}
 func(d *Desktop) RevealFolder(path string)error{
  d.mu.Lock();root:=d.root;d.mu.Unlock()
  p,e:=localrun.Within(root,path);if e!=nil{return e};return localrun.RevealDirectory(p)
@@ -199,14 +202,14 @@ func(d *Desktop) ChooseCreateDirectory()(string,error){
 func(d *Desktop) Create(dir,name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running{return Navigation{},errors.New("正在运行")}
- target,e:=localrun.OpenDirectory(dir);if e!=nil{return Navigation{},e}
+ target,e:=filepath.Abs(dir);if e!=nil{return Navigation{},e}
  root:=d.root
- if root==""{root=target}else if _,e=localrun.Within(root,target);e!=nil{
+ if root==""{root,e=localrun.OpenDirectory(target);if e!=nil{return Navigation{},e};target=root}else if _,e=localrun.Within(root,target);e!=nil{
   rel,relErr:=filepath.Rel(root,target)
   // Only explicit external directories may establish a new root. Do not
   // reinterpret a rejected descendant (hidden, symlink, etc.) as external.
   if relErr==nil&&rel!=".."&&!filepath.IsAbs(rel)&&!strings.HasPrefix(rel,".."+string(filepath.Separator)){return Navigation{},e}
-  root=target
+  root,e=localrun.OpenDirectory(target);if e!=nil{return Navigation{},e};target=root
  }
  s,e:=localrun.CreateSourceWithKit(root,target,name,d.kitPackage);if e!=nil{return Navigation{},e}
  d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil

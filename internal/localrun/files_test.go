@@ -55,3 +55,9 @@ func TestImportAppendAndSeparateExtensions(t *testing.T){
  got,e=ImportCases(q.Path,cp,got.Revision,true);if e!=nil||len(got.Cases)!=2{t.Fatalf("%+v %v",got,e)}
  original,e:=LoadCases(p);if e!=nil||original.Revision!=cs.Revision{t.Fatal("original changed")}
 }
+
+func TestCreateFolderNoOverwrite(t *testing.T){
+ root:=t.TempDir();p,e:=CreateFolder(root,root,"作业 1");if e!=nil{t.Fatal(e)}
+ if p!=filepath.Join(root,"作业 1"){t.Fatal(p)}
+ for _,name:=range []string{"作业 1","../escape",".hidden","CON","trailing."}{if _,e:=CreateFolder(root,root,name);e==nil{t.Fatalf("accepted %q",name)}}
+}

@@ -42,7 +42,7 @@ async function call<T>(method:string,...args:unknown[]):Promise<T>{
 function markStale(){if(last&&!last.stale){last.stale=true;renderTabs();renderResult()}}
 function changes(){dirty=true;markStale();updateControls();}
 function updateControls(){
- btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("editorOptions").disabled=busy||!source;btn("new").disabled=busy||!runtime;btn("refreshTree").disabled=busy||!root;btn("locateFile").disabled=busy||!source;btn("collapseTree").disabled=busy||!root;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
+ btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("editorOptions").disabled=busy||!source;btn("new").disabled=busy||!runtime;btn("refreshTree").disabled=busy||!root;btn("locateFile").disabled=busy||!source;btn("collapseTree").disabled=btn("newRootFolder").disabled=busy||!root;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
  btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
@@ -240,6 +240,9 @@ btn("refreshTree").onclick=()=>void refreshTree(true);
 function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target)await select(await call<Nav>("Create",target.dir,target.name))})}
 btn("new").onclick=()=>void newFile();
 btn("newHere").onclick=()=>{const e=menuEntry;void newFile(e?.directory?e.path:source?.directory??root)};
+async function newFolder(dir:string){if(busy)return;busy=true;updateControls();drawTree();try{const name=await dialogs.name("新建文件夹","在 "+dir+" 中新建文件夹","新文件夹","新建");if(!name)return;const path=await call<string>("CreateFolder",dir,name);expanded.add(dir);expanded.add(path)}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();await refreshTree(true);drawTree()}}
+btn("newFolderHere").onclick=()=>{const e=menuEntry;void newFolder(e?.directory?e.path:source?.directory??root)};
+btn("newRootFolder").onclick=()=>void newFolder(root);
 btn("locateFile").onclick=()=>void locateFile();btn("collapseTree").onclick=()=>{expanded=new Set([root]);drawTree()};
 btn("rename").onclick=()=>void navigate(async()=>{if(!source)return;const name=await dialogs.name("重命名文件","新文件名",source.name,"重命名");if(name&&name!==source.name)await select(await call<Nav>("Rename",name))});
 btn("import").onclick=()=>void navigate(async()=>{if(!loaded)return;const append=cases.length>0;if(append&&!await dialogs.confirm("将导入的测试数据追加到现有样例？"))return;const s=await call<CaseSet|null>("Import",revision,append);if(s){applySet(s);markStale();await showOrphans()}});
