@@ -9,3 +9,7 @@ CI 验证真实发行资产和安装清单；实际管理器启动、中文路�
 ## 图标及安装回归
 
 组织设计源 `Routilet/.github/assets/icons/companion.svg` 的字节相同副本为唯一输入；前端标题栏使用原 SVG，Wails 运行时图标、ICO、ICNS 均从它生成。无需设计新图标。安装测试下载与 Routilet 一致的 pnpm 12.22.0 原生发行包并校验 SHA256，使用相同 install 参数及隔离配置，避免依赖 npm 包的内部 CLI 路径。macOS 安装后再次验证应用签名。真实窗口、任务栏及 Dock 外观仍需真机验证。
+
+## 首次测试版授权
+
+维护者明确批准合并并发布 0.1.0-beta.1 供真机验收。release.yml 增加仅该版本的 main push 自动发布条件；必须经过双平台构建与安装验证，推送 next，不变更 latest，已存在版本不重复发布或改标签。其他版本仍需 main 手动勾选 publish。此条件不是常规正式版自动发布策略。

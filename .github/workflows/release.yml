@@ -1,7 +1,8 @@
 name: Companion native release
 on:
   push:
-    branches: [feat/native-distribution]
+    branches: [main, feat/native-distribution]
+    paths: ['VERSION', '.github/workflows/release.yml', 'desktop/**', 'internal/**', 'cmd/**', 'scripts/**', 'package.json', 'go.mod', 'go.sum']
   pull_request:
     branches: [main, feat/native-companion-migration]
   workflow_dispatch:
@@ -114,6 +115,8 @@ jobs:
   package:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.candidate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -126,6 +129,7 @@ jobs:
           pattern: native-*
           path: artifacts
       - name: Assemble reviewed native npm tarball
+        id: candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -135,6 +139,7 @@ jobs:
           done
           node scripts/package-release.mjs
           (cd release && sha256sum *.tgz > SHA256SUMS)
+          printf 'version=%s\n' "$(tr -d '\r\n' < VERSION)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: companion-npm-candidate
@@ -193,7 +198,8 @@ jobs:
           fi
   publish:
     needs: [package, installed]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
+    # One explicitly approved first beta. Other versions require manual dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.1'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -215,5 +221,14 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.1 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
+            case "$code" in
+              200) echo "Approved beta already published; no tag changes."; exit 0 ;;
+              404) ;;
+              *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
+            esac
+          fi
           npm publish "$archive" --access public --tag "$tag" --ignore-scripts
