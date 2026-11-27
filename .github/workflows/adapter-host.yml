@@ -1,0 +1,84 @@
+name: Adapter host CI (no publishing)
+on:
+  push:
+    branches: ['feat/adapter-*']
+  pull_request:
+    branches: [main, 'feat/adapter-*']
+    paths:
+      - 'internal/ojadapter/**'
+      - '.github/workflows/adapter-host.yml'
+      - 'desktop/**'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Routilet/accoding-adapter
+          ref: 65727d1362ffd6809bda4a370103f326bb9299a8
+          path: adapter-fixture
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Routilet/routilet
+          ref: 58bfc7ca4dc3275cecd5e7a94c9645ed38eaa3a1
+          path: manager-fixture
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Real adapter and host (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((go env GOARCH) -ne 'amd64') { throw 'expected amd64' }
+          $adapter = Join-Path $env:RUNNER_TEMP 'accoding-adapter.exe'
+          $manager = Join-Path $env:RUNNER_TEMP 'routilet.exe'
+          Push-Location adapter-fixture
+          try {
+            go build -mod=readonly -ldflags "-X github.com/Routilet/accoding-adapter/internal/wire.Version=0.1.0-beta.1" -o $adapter ./cmd/accoding-adapter
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Pop-Location }
+          Push-Location manager-fixture/desktop
+          try {
+            go build -mod=readonly -tags production -ldflags "-H windowsgui" -o $manager .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Pop-Location }
+          $env:COMPANION_TEST_MANAGER = $manager
+          $env:COMPANION_TEST_ADAPTER = $adapter
+          $env:COMPANION_TEST_SYSTEM_CREDENTIALS = '1'
+          go test -mod=readonly -count=1 -v ./internal/ojadapter
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet -mod=readonly ./internal/ojadapter
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Real adapter and host (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          set -euo pipefail
+          test "$(go env GOARCH)" = arm64
+          adapter="$RUNNER_TEMP/accoding-adapter"
+          manager="$RUNNER_TEMP/routilet"
+          (cd adapter-fixture && CGO_ENABLED=0 go build -mod=readonly -ldflags "-X github.com/Routilet/accoding-adapter/internal/wire.Version=0.1.0-beta.1" -o "$adapter" ./cmd/accoding-adapter)
+          (cd manager-fixture/desktop && go build -mod=readonly -tags production -o "$manager" .)
+          COMPANION_TEST_MANAGER="$manager" COMPANION_TEST_ADAPTER="$adapter" go test -mod=readonly -count=1 -v ./internal/ojadapter
+          go vet -mod=readonly ./internal/ojadapter

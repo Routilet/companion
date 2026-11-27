@@ -9,8 +9,10 @@ import (
  "os"
  "path/filepath"
  "sync"
+ "strings"
 
  "github.com/Routilet/companion/internal/localrun"
+ "github.com/Routilet/companion/internal/ojadapter"
  "github.com/wailsapp/wails/v3/pkg/application"
  "github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -19,6 +21,12 @@ import (
 var assets embed.FS
 
 type Desktop struct{
+ accounts ojAccountService
+ ojPending *ojPending
+ ojSubmit *ojSubmissionPending
+ ojJudges map[judgeKey]judgeView
+ ojReceipt *ojadapter.Receipt
+ ojSequence uint64
  native *application.App
  mu sync.Mutex
  selected localrun.Source
@@ -71,6 +79,19 @@ func(d *Desktop) CopyManualExample(id,key,fingerprint string)error{
  if !d.native.Clipboard.SetText(example){return errors.New("无法写入系统剪贴板")}
  return nil
 }
+func(d *Desktop) CopyManualSignature(id,key,fingerprint,signature string)error{
+ d.mu.Lock()
+ if d.manual==nil||d.manual.Fingerprint!=fingerprint{d.mu.Unlock();return errors.New("手册已变化，请重新打开")}
+ m,e:=localrun.LoadManual(d.selected.Path,d.kitPackage)
+ if e!=nil||m.Fingerprint!=fingerprint||m.Origin!=d.manual.Origin||m.SourcePath!=d.manual.SourcePath{d.mu.Unlock();return errors.New("资源或当前文件已变化，请重新打开手册")}
+ valid:=false
+ for _,c:=range m.Reference.Categories{for _,entry:=range c.Entries{if entry.ID!=id{continue};signatures:=entry.Signatures
+  if len(entry.Variants)>0{signatures=nil;for _,v:=range entry.Variants{if v.Key==key{signatures=append(append([]string{},entry.CommonSignatures...),v.Signatures...);break}}}
+  for _,s:=range signatures{if s==signature{valid=true}}
+ }}
+ d.mu.Unlock();if !valid{return errors.New("未知函数接口")}
+ if !d.native.Clipboard.SetText(signature){return errors.New("无法写入系统剪贴板")};return nil
+}
 func(d *Desktop) ObserverStatus()localrun.ObserverInfo{
  d.mu.Lock();p:=d.managerPath;d.mu.Unlock()
  info,e:=localrun.ProbeManagedObserver(p);if e!=nil{return localrun.ObserverInfo{Error:e.Error()}}
@@ -90,6 +111,12 @@ func(d *Desktop) Observe(compiler,revision string,selection int)error{
  return nil
 }
 func(d *Desktop) ObservationState()string{d.mu.Lock();defer d.mu.Unlock();return d.observerState}
+func(d *Desktop) OJAccountStatus() ojadapter.AccountView { return d.accounts.Status() }
+func(d *Desktop) OJCheckAdapter() ojadapter.AccountView { if a,ok:=d.accounts.(interface{CheckAvailability(context.Context) ojadapter.AccountView});ok{return a.CheckAvailability(context.Background())};return d.accounts.Status() }
+func(d *Desktop) OJLogin(username,password string,remember bool)(ojadapter.AccountView,error){return d.accounts.Login(context.Background(),username,password,remember)}
+func(d *Desktop) OJRestore()(ojadapter.AccountView,error){return d.accounts.Restore(context.Background())}
+func(d *Desktop) OJRefresh()(ojadapter.AccountView,error){return d.accounts.Refresh(context.Background())}
+func(d *Desktop) OJLogout()(ojadapter.AccountView,error){return d.accounts.Logout()}
 func(d *Desktop) Config()(localrun.Settings,error){d.mu.Lock();defer d.mu.Unlock();return d.settings,nil}
 func(d *Desktop) ConfigWarning()string{d.mu.Lock();defer d.mu.Unlock();return d.settingsError}
 func(d *Desktop) StoreConfig(c,cpp,editor string)error{
@@ -112,9 +139,20 @@ func(d *Desktop) OpenDropped(path string)(Navigation,error){
  root,e:=localrun.OpenDirectory(path);if e!=nil{return Navigation{},errors.New("请拖入一个 C/C++ 文件或普通文件夹")}
  d.root=root;d.selected=localrun.Source{};d.prepared=nil;return d.nav(),nil
 }
+func(d *Desktop) DetectEditors()[]localrun.EditorOption{return localrun.DetectEditors()}
+func(d *Desktop) ChooseEditor()(string,error){
+ return d.native.Dialog.OpenFile().SetTitle("选择编辑器可执行文件").PromptForSingleSelection()
+}
 func(d *Desktop) OpenEditor(editor string)error{
  d.mu.Lock();p:=d.selected.Path;d.mu.Unlock()
  return localrun.OpenEditor(p,editor)
+}
+func(d *Desktop) CreateFolder(dir,name string)(string,error){
+ d.mu.Lock();defer d.mu.Unlock();if d.running{return "",errors.New("正在运行")};return localrun.CreateFolder(d.root,dir,name)
+}
+func(d *Desktop) RevealFolder(path string)error{
+ d.mu.Lock();root:=d.root;d.mu.Unlock()
+ p,e:=localrun.Within(root,path);if e!=nil{return e};return localrun.RevealDirectory(p)
 }
 func(d *Desktop) Reveal()error{
  d.mu.Lock();p:=d.root;if d.selected.Path!=""{p=d.selected.Directory};d.mu.Unlock()
@@ -122,6 +160,7 @@ func(d *Desktop) Reveal()error{
 }
 func(d *Desktop) Prepare(compiler string)(localrun.Submission,error){
  d.mu.Lock();defer d.mu.Unlock()
+ d.ojSubmit=nil;d.prepared=nil
  if d.running||d.selected.Path==""{return localrun.Submission{},errors.New("当前不能复制")}
  var last *localrun.BatchResult
  if r,ok:=d.last[d.selected.Path];ok{last=&r}
@@ -168,18 +207,37 @@ func(d *Desktop) Select(path string)(Navigation,error){
  s,e:=localrun.Open(p);if e!=nil{return Navigation{},e}
  d.selected=s;return d.nav(),nil
 }
+// ChooseCreateDirectory is read-only; cancelling or browsing does not change navigation.
+func(d *Desktop) ChooseCreateDirectory()(string,error){
+ p,e:=d.native.Dialog.OpenFile().SetTitle("选择新建文件的位置").CanChooseFiles(false).CanChooseDirectories(true).PromptForSingleSelection()
+ if e!=nil||p==""{return "",e}
+ return localrun.OpenDirectory(p)
+}
 func(d *Desktop) Create(dir,name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running{return Navigation{},errors.New("正在运行")}
- s,e:=localrun.CreateSourceWithKit(d.root,dir,name,d.kitPackage);if e!=nil{return Navigation{},e}
- d.selected=s;return d.nav(),nil
+ target,e:=filepath.Abs(dir);if e!=nil{return Navigation{},e}
+ root:=d.root
+ if root==""{root,e=localrun.OpenDirectory(target);if e!=nil{return Navigation{},e};target=root}else if _,e=localrun.Within(root,target);e!=nil{
+  rel,relErr:=filepath.Rel(root,target)
+  // Only explicit external directories may establish a new root. Do not
+  // reinterpret a rejected descendant (hidden, symlink, etc.) as external.
+  if relErr==nil&&rel!=".."&&!filepath.IsAbs(rel)&&!strings.HasPrefix(rel,".."+string(filepath.Separator)){return Navigation{},e}
+  root,e=localrun.OpenDirectory(target);if e!=nil{return Navigation{},e};target=root
+ }
+ if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")}
+ if b,e:=ojadapter.LoadBinding(filepath.Join(target,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
+ s,e:=localrun.CreateSourceWithKit(root,target,name,d.kitPackage);if e!=nil{return Navigation{},e}
+ d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil
 }
 func(d *Desktop) Rename(name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running||d.selected.Path==""{return Navigation{},errors.New("当前不能重命名")}
  old:=d.selected.Path
- s,e:=localrun.RenameSource(d.root,old,name);if e!=nil{return Navigation{},e}
- delete(d.last,old);delete(d.last,s.Path);d.selected=s;return d.nav(),nil
+ if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")};if _,e:=localrun.Within(d.root,old);e!=nil{return Navigation{},e}
+ var s localrun.Source
+ e:=ojadapter.RenameBound(old,filepath.Join(filepath.Dir(old),name),func()error{var err error;s,err=localrun.RenameSource(d.root,old,name);return err})
+ if s.Path!=""{delete(d.last,old);delete(d.last,s.Path);d.selected=s;d.prepared=nil};if e!=nil{return Navigation{},e};return d.nav(),nil
 }
 func(d *Desktop) Orphans()([]localrun.Orphan,error){
  d.mu.Lock();defer d.mu.Unlock()
@@ -251,6 +309,7 @@ func(d *Desktop) IsCurrent(compiler string)(bool,error){
 }
 func(d *Desktop) Cancel(){d.mu.Lock();defer d.mu.Unlock();if d.cancel!=nil{d.cancel()}}
 func(d *Desktop) shutdown(){
+ if d.accounts!=nil{d.accounts.Close()}
  d.mu.Lock();if d.cancel!=nil{d.cancel()};done:=d.done;observerDone:=d.observerDone;d.mu.Unlock()
  if done!=nil{<-done}
  // Keep session files alive until Observer exits normally. Never kill its GUI
@@ -262,7 +321,7 @@ func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
  if len(os.Args)==2&&os.Args[1]=="--check-install"{p,e:=localrun.ResolveInstalledKit();if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};k,e:=localrun.LoadKitPackage(p);if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
  kit,e:=localrun.ResolveInstalledKit()
- d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv)}
+ d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewManagedAccounts(os.Getenv(localrun.RoutiletExecutableEnv),os.Getenv(ojadapter.AccountPreviewEnv))}
  if e!=nil{d.kitError=e.Error()}
  if kit==""&&os.Getenv(localrun.KitPreviewEnv)!=""{d.kitPackage=os.Getenv(localrun.KitPreviewEnv);d.kitError=""}
  if path,e:=localrun.SettingsPath();e==nil{d.settingsPath=path;if s,e:=localrun.LoadSettings(path);e==nil{d.settings=s}else{d.settingsError=e.Error()}}else{d.settingsError=e.Error()}
