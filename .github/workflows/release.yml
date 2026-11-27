@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -218,8 +218,8 @@ jobs:
           fi
   publish:
     needs: [package, installed, frontend]
-    # One explicitly approved first beta. Other versions require manual dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.1'))
+    # Only explicitly approved beta.2. Other versions require manual dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.2'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -241,12 +241,12 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.1 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.2 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
             code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in
-              200) echo "Approved beta already published; no tag changes."; exit 0 ;;
+              200) echo "Approved beta.2 already published; no tag changes."; exit 0 ;;
               404) ;;
               *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
             esac

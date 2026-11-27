@@ -70,7 +70,7 @@ async function select(nav:Nav){
  navEpoch++;
  if(root!==nav.root){root=nav.root;expanded=new Set([root]);treeEntries.clear();seenMissing.clear()}
  el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
- el("workspace").scrollTop=0;closeFileMenu();rawResult=false;if(!observing)el("observerState").textContent="";
+ el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
  el("title").textContent=source?.name??"选择一个源文件";el("path").textContent=source?source.directory.slice(root.length).replace(/^[\\/]/,"")||el("folder").textContent:root;el("path").title=source?.path??root;el("work").hidden=!source;el("fileActions").hidden=!source;el("batchSummary").textContent="";
  if(source){let dir=source.directory;while(dir&&dir!==root){expanded.add(dir);const next=dir.replace(/[\\/][^\\/]+$/,"");if(next===dir||next.length<root.length)break;dir=next}compiler.value=compilerByLanguage[language(source)];const wasMissing=seenMissing.has(source.path);if(wasMissing)await call("Invalidate",source.path);await reload();
@@ -81,7 +81,7 @@ async function select(nav:Nav){
 }
 async function showOrphans(){
  const box=el("orphans");box.replaceChildren();if(!source||cases.length||dirty||!loaded)return;
- try{const list=await call<Orphan[]>("Orphans");if(!list.length)return;box.append(node("p","发现未关联的测试数据","muted"));
+ try{const list=await call<Orphan[]|null>("Orphans");if(!list?.length)return;box.append(node("p","发现未关联的测试数据","muted"));
  for(const o of list){const b=document.createElement("button");b.textContent=o.name+" · "+o.count+" 组 · 恢复";b.onclick=()=>void navigate(async()=>{if(!await dialogs.confirm("复制旧样例到当前文件？原数据保留。"))return;applySet(await call<CaseSet>("Restore",o.name,revision));markStale();await showOrphans()});box.append(b)}
  }catch(e){box.append(node("p",String(e),"muted"))}
 }
@@ -104,7 +104,7 @@ async function refreshTree(force=false){
  try{
   const next=new Map<string,Entry[]>();const queue=[base];const present=new Set<string>();let scanned=0;
   while(queue.length&&scanned<128){const dir=queue.shift()!;scanned++;
-   let list:Entry[];try{list=await call<Entry[]>("List",dir)}catch(e){if(dir===base)throw e;continue}
+   let list:Entry[];try{list=(await call<Entry[]|null>("List",dir))??[]}catch(e){if(dir===base)throw e;continue}
    if(epoch!==navEpoch)return;next.set(dir,list);
    for(const e of list){if(!e.directory)present.add(e.path);else if(expanded.has(e.path))queue.push(e.path)}
   }
@@ -198,7 +198,7 @@ grip.addEventListener("keydown",e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"
 async function run(all:boolean){
  if(busy||!source||!loaded)return;
  busy=true;updateControls();renderCases();drawTree();
- try{await save();await storeConfig();runningTest=true;updateControls();el("progress").hidden=false;status.textContent="正在编译与运行…";const r=await call<Result>("RunBatch",compiler.value.trim(),revision,all?-1:selected);show(r)}
+ try{await save();await storeConfig();runningTest=true;updateControls();el("progress").hidden=false;el("batchSummary").textContent="正在编译与运行…";status.textContent="";const r=await call<Result>("RunBatch",compiler.value.trim(),revision,all?-1:selected);show(r)}
  catch(e){status.textContent=String(e)}finally{runningTest=false;el("progress").hidden=true;busy=false;renderCases();drawTree()}
 }
 btn("open").onclick=()=>void navigate(async()=>select(await call<Nav>("ChooseSource")));
@@ -213,7 +213,7 @@ btn("import").onclick=()=>void navigate(async()=>{if(!loaded)return;const append
 setInterval(()=>{void refreshTree()},1500);
 setInterval(async()=>{
  if(!runtime)return;
- if(runningTest&&!progressCheck){progressCheck=true;try{const p=await call<Progress>("Progress");if(!runningTest)return;const bar=el<HTMLProgressElement>("progress");if(p.phase==="compiling"){bar.removeAttribute("value");status.textContent="正在编译…"}else if(p.phase==="running"){bar.max=Math.max(1,p.total);bar.value=p.completed;status.textContent="正在运行 "+p.completed+" / "+p.total+" 组"}}catch{}finally{progressCheck=false}}
+ if(runningTest&&!progressCheck){progressCheck=true;try{const p=await call<Progress>("Progress");if(!runningTest)return;const bar=el<HTMLProgressElement>("progress");if(p.phase==="compiling"){bar.removeAttribute("value");el("batchSummary").textContent="正在编译…"}else if(p.phase==="running"){bar.max=Math.max(1,p.total);bar.value=p.completed;el("batchSummary").textContent="正在运行 "+p.completed+" / "+p.total+" 组"}}catch{}finally{progressCheck=false}}
  if(dropCheck)return;dropCheck=true;
  try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||dialogs.isOpen()||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||el<HTMLDialogElement>("manualDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
 },300);
