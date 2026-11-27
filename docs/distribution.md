@@ -42,3 +42,7 @@ CI 验证真实发行资产和安装清单；实际管理器启动、中文路�
 
 ## CI 使用原则
 普通开发先在本地进行针对性测试，汇总修改后再提交；不将完整双平台构建作为逐步调试工具。main 的 PR 使用统一 native release 候选验收（包含桌面 Go 测试、核心测试、真实 Adapter/Manager、浏览器、签名构建与安装），不再同时自动触发重复的 native CI 与 adapter-host；后两者保留专项手动入口和原有专项分支。草稿 PR 跳过重型候选任务，ready for review 或后续同步再触发；过时 PR 验收取消。main 发行仍须经过完整门禁，不能因节省资源而跳过测试。
+
+## 0.1.0 正式发行
+
+维护者已批准正式发行 Companion 与 Accoding Adapter 0.1.0，发布至 npm latest。沿用 Routilet 0.1.8、独立 Exam Kit 0.6.10 和 Observer。PR #19 的紧凑界面、近期比赛优先导入和加载反馈纳入正式版。保留实际前端回归、双平台构建、候选安装及固定 Adapter 正式源码联合测试；核验 Adapter 正式版本及 latest 标签后才发布 Companion。旧 beta 与历史快照不覆盖，不迁移旧课程数据。

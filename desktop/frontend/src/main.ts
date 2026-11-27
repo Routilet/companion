@@ -84,7 +84,7 @@ async function select(nav:Nav){
  el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
  el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
- el("title").textContent=source?.name??"选择一个源文件";el("path").textContent=source?source.directory.slice(root.length).replace(/^[\\/]/,"")||el("folder").textContent:root;el("path").title=source?.path??root;el("work").hidden=!source;el("fileActions").hidden=!source;el("batchSummary").textContent="";
+ el("title").textContent=source?.name??"选择一个源文件";el("title").title=source?.path??"";el("path").hidden=false;el("path").textContent=source?source.directory.slice(root.length).replace(/^[\\/]/,"")||el("folder").textContent:root;el("path").title=source?.path??root;el("work").hidden=!source;el("fileActions").hidden=!source;el("batchSummary").textContent="";
  if(source){let dir=source.directory;while(dir&&dir!==root){expanded.add(dir);const next=dir.replace(/[\\/][^\\/]+$/,"");if(next===dir||next.length<root.length)break;dir=next}compiler.value=compilerByLanguage[language(source)];const wasMissing=seenMissing.has(source.path);if(wasMissing)await call("Invalidate",source.path);await reload();
   if(seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，存在旧测试数据。是否继续使用这些样例？")){loaded=false;status.textContent="未确认旧样例；请重新选择文件";}else seenMissing.delete(source.path)}
   if(loaded){const cached=await call<Result|null>("Cached",compiler.value.trim());if(cached){if(seenMissing.has(source.path))cached.stale=true;show(cached)}await showOrphans()}
@@ -198,8 +198,8 @@ function comparison(c:CaseResult){
 function renderResult(){
  result.hidden=false;const wrap=el("results"),diag=el("diagnostics");wrap.replaceChildren();diag.replaceChildren();
  el("diagnosticsSection").hidden=true;btn("rawToggle").hidden=true;el("batchSummary").textContent="";
- const current=cases[selected];const candidate=caseResult(selected);const tableMode=!!(last&&candidate&&candidate.difference&&candidate.expected!==null&&!last.stale&&matches(candidate,selected)&&!editingExpected);el("outputLayout").classList.toggle("comparison-mode",tableMode||!current);el("expectedEditor").hidden=!current||tableMode;btn("editExpected").hidden=!tableMode;stale.hidden=true;
- if(!last){el("runDetails").hidden=true;el("resultTitle").textContent="实际输出";el("resultTitle").className="";el("resultMeta").textContent="";wrap.append(node("p","尚未运行","muted"));return}el("runDetails").hidden=false;const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
+ const current=cases[selected];const candidate=caseResult(selected);const tableMode=!!(last&&candidate&&candidate.difference&&candidate.expected!==null&&!last.stale&&matches(candidate,selected)&&!editingExpected);el("outputLayout").classList.toggle("comparison-mode",tableMode||!current);el("expectedEditor").hidden=!current||tableMode;btn("editExpected").hidden=!tableMode;el("outputHeading").textContent=tableMode?"输出对比":"实际输出";stale.hidden=true;
+ if(!last){el("runDetails").hidden=true;el("resultTitle").textContent="";el("resultTitle").className="";el("resultMeta").textContent="";wrap.append(node("pre","尚未运行","output-placeholder"));return}el("runDetails").hidden=false;const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
  stale.hidden=!r.stale&&!past;
  el("meta").textContent=r.compiler+(r.kitVersion?" · Exam Kit "+r.kitVersion+" · "+(r.components?.length??0)+" 个组件":"");
  const compared=r.cases.filter(c=>c.expected!==null),passed=compared.filter(c=>c.state==="passed").length;
@@ -215,7 +215,7 @@ function renderResult(){
    else{wrap.append(comparison(c));wrap.append(node("p","首处差异 · 第 "+c.difference.line+" 行，第 "+c.difference.column+" 列","muted note"))}
   }else wrap.append(output(past?"上次实际输出":"",c.process.stdout));
   if(c.process.stderr)wrap.append(output("标准错误",c.process.stderr));
- }
+ }else wrap.append(node("pre",r.state==="completed"?"尚未运行":"无实际输出","output-placeholder"));
  for(const x of r.diagnostics??[]){const d=node("div","","diagnostic");d.append(node("p",x.severity+" · "+(x.file?x.file+":"+x.line+"："+x.message:x.message)));const more=document.createElement("details");more.append(node("summary","完整诊断"),node("pre",x.raw));d.append(more);diag.append(d)}
  if(r.compilation.stdout)diag.append(output("编译输出",r.compilation.stdout));
  if(!diag.childElementCount&&r.compilation.stderr)diag.append(output("编译错误",r.compilation.stderr));
@@ -286,14 +286,14 @@ const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message
 const documentReader=installDocument(call);
 const workbench=installWorkbench(call,path=>{if(path!==source?.path)void navigate(async()=>select(await call<Nav>("Select",path)))},()=>{void syncOJWorkspace();if(workbench.active())void ojAccount.enter()},()=>source?.path??"",ojStatus.mark,()=>busy);
 let workspaceEpoch=0;
-async function syncOJWorkspace(rescan=true){const n=++workspaceEpoch;if(!workbench.active()){ojStatus.clear();return}if(ojAccount.connecting())return;if(rescan||workbench.needsScan())await workbench.scan();else workbench.draw();if(n!==workspaceEpoch||!workbench.active())return;await ojImport.refresh(source?.path??"");if(n!==workspaceEpoch||!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
+async function syncOJWorkspace(rescan=true){const n=++workspaceEpoch;if(!workbench.active()){ojImport.clearBinding();if(source){el("title").textContent=source.name;el("title").title=source.path}ojStatus.clear();return}if(ojAccount.connecting())return;if(rescan||workbench.needsScan())await workbench.scan();else workbench.draw();if(n!==workspaceEpoch||!workbench.active())return;await ojImport.refresh(source?.path??"");if(n!==workspaceEpoch||!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");
 let editorChoices:EditorOption[]=[];let editorEpoch=0;
 function editorLabel(){return editorPath==="@system"?"系统默认编辑器":editorChoices.find(e=>e.path===editorPath)?.name??editorPath.split(/[\\/]/).at(-1)?.replace(/\.(exe|app)$/i,"")??""}
 function updateEditorLabel(){btn("openEditor").textContent="编辑";btn("openEditor").title=editorPath?"打开 "+editorLabel():"打开编辑器";btn("settingsEditor").textContent=editorPath?editorLabel():"自动检测"}
-async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="已请求打开 "+editorLabel();return true}catch(e){status.textContent=String(e);return false}}
+async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="";return true}catch(e){status.textContent=String(e);return false}}
 async function editorMenu(openAfter:boolean){
  if(busy||(openAfter&&!source)||editorDialog.open)return;
  const epoch=++editorEpoch;editorDialog.showModal();const choices=el("editorChoices"),hint=el("editorHint");choices.replaceChildren();hint.textContent="正在检测本机代码编辑器…";

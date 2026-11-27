@@ -38,9 +38,11 @@ async function setup(t){
    case 'ApplyKitSwitch':return {changed:args[1],failed:[]};
    case 'OJBinding':return state.name==='A.c'?(state.ojBinding??null):null;
    case 'OJCachedJudges':return state.ojJudges??{};
-   case 'OJWorkspace':return {items:state.ojBinding?[{path:'/work/A.c',directory:'/work',group:'work',binding:state.ojBinding}]:[],limited:false};
+   case 'OJWorkspace':return {items:state.ojItems??(state.ojBinding?[{path:'/work/A.c',directory:'/work',group:'work',binding:state.ojBinding}]:[]),limited:false};
    case 'ReadLocalDocument':return state.document??null;
-   case 'OJRecentContests':return [];
+   case 'OJRecentContests':return state.recentContests??[];
+   case 'OJPreviewImportAt':if(state.holdPreview)await new Promise((resolve,reject)=>{state.finishPreview=resolve;state.failPreview=()=>reject(Error('获取比赛失败'))});return {token:'import-preview',plan:{title:'期末复习赛',directory:'/work',rows:[{name:'A.c',title:'题目',action:'create',samples:1,warnings:[]}]}};
+   case 'OJApplyImport':if(state.holdApply)await new Promise(resolve=>{state.finishApply=resolve});return {nav:nav(),completed:['A.c'],skipped:[],failed:[]};
    case 'OJPollReceipt':return {id:args[0],result:'AC',language:'C'};
    case 'OJRefreshJudges':return 1;
    case 'OJUnbind':state.ojBinding=null;state.ojJudges={};return;
@@ -50,7 +52,7 @@ async function setup(t){
    case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
    case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:['C']},title:'测试题',label:'A',nickname:'fixture'};
    case 'OJSendSubmission':return {id:'12',result:'AC',accountId:'7',language:'C'};
-   case 'Version':return '0.1.0-beta.6';
+   case 'Version':return '0.1.0';
    case 'Config':return {c:'',cpp:'',editor:'',root,selected:'A.c'};
    case 'ConfigWarning':return '';
    case 'Initial':return nav();
@@ -224,7 +226,7 @@ test('OJ cached state survives keyed tree refresh, explicit refresh is the only 
  await p.locator('#ojDetailBtn').click();await p.locator('#ojRefreshCurrent').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshJudges'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges')), [['OJRefreshJudges',['/work/A.c']]]);
  await p.locator('#ojDetailClose').click();await p.waitForFunction(()=>!document.querySelector('#ojUnbind').disabled);
- await p.locator('#ojProblemMenu summary').click();await p.locator('#ojUnbind').click();await p.locator('#actionAccept').click();await p.waitForFunction(()=>document.querySelector('#ojBinding').hidden&&!document.querySelector('.tree-judge:not([hidden])'));
+ await p.locator('#sourceMenu summary').click();await p.locator('#ojUnbind').click();await p.locator('#actionAccept').click();await p.waitForFunction(()=>document.querySelector('#ojBinding').hidden&&!document.querySelector('.tree-judge:not([hidden])'));
 });
 
 test('online submission in unified preview requires explicit language and confirmation',async t=>{
@@ -278,3 +280,43 @@ test('autosave failure preserves edits and blocks navigation; explicit retry suc
 
 test('saved account restores once on entering OJ, never from settings or ordinary file mode',async t=>{const p=await setup(t);await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojState='signed_out';fixture.ojRemember=true;fixture.ojBinding={title:'题目',label:'A',target:{kind:'contest',contestId:'42',problemId:'5'}}});await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRestore').length),0);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.waitForFunction(()=>document.querySelector('#ojAccountEntry').textContent.includes('已登录'));assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRestore').length),1);await p.locator('#filesMode').click();await p.locator('#ojMode').click();assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRestore').length),1)});
 test('resource switch defaults to template files and applies only after confirmation',async t=>{const p=await setup(t);await p.locator('#folderMenu summary').click();await p.locator('#kitRoot').click();await p.locator('#kitRows input').first().waitFor();assert.equal(await p.locator('#kitRows input').nth(0).isChecked(),true);assert.equal(await p.locator('#kitRows input').nth(1).isChecked(),false);assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='ApplyKitSwitch').length),0);await p.locator('#kitApply').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='ApplyKitSwitch'));assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='ApplyKitSwitch')),['ApplyKitSwitch','kit-preview',['/work/A.c']])});
+
+test('recent contests are the default import surface; link entry is optional',async t=>{
+ const p=await setup(t);await p.evaluate(()=>{fixture.ojAvailable=true;fixture.recentContests=[{id:'1359',title:'期末复习赛',start:'2026-11-27 08:00:00',status:'进行中'}]});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojImport').click();
+ await p.locator('.recent-contest').waitFor();assert.equal(await p.locator('#ojImportURL').isVisible(),false);assert.equal(await p.locator('#ojImportConfirm').isDisabled(),true);
+ await p.locator('.recent-contest').click();assert.equal(await p.locator('#ojImportConfirm').isEnabled(),true);assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJPreviewImportAt').length),0);
+ await p.locator('#ojImportConfirm').click();await p.locator('#ojImportPreview').waitFor();
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='OJPreviewImportAt')),['OJPreviewImportAt','https://accoding.buaa.edu.cn/contest-ng/index.html#/1359','.c',false,'/work']);
+ await p.locator('#ojImportPreview button[value=cancel]').click();
+ await p.locator('#ojImport').click();await p.locator('#ojImportMode').click();assert.equal(await p.locator('#ojImportURL').isVisible(),true);await p.locator('#ojImportURL').fill('https://accoding.buaa.edu.cn/problemset/42');assert.equal(await p.locator('#ojImportConfirm').isEnabled(),true);await p.locator('#ojImportDialog button[value=cancel]').click();
+});
+test('51 contest problems fit a compact matrix, no repeated unsubmitted label, selection stays visible',async t=>{
+ const p=await setup(t);await p.setViewportSize({width:1040,height:720});await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'很长的题目标题',label:'A',target:{kind:'contest',contestId:'1359',problemId:'1'}};fixture.ojItems=Array.from({length:51},(_,i)=>{const label=i<26?String.fromCharCode(65+i):'A'+String.fromCharCode(65+i-26);const path='/work/'+label+'.c';return {path,directory:'/work',group:'复习赛',binding:{title:'题目 '+label,label,contestTitle:'R-2026级C语言程序设计期末复习赛',target:{kind:'contest',contestId:'1359',problemId:String(i+1)}}}});fixture.ojJudges=Object.fromEntries(fixture.ojItems.map(x=>[x.path,{status:{accepted:false},checked:'2026-11-27T00:00:00Z'}]));fixture.cases=[{input:'1',expected:'2'}]});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.waitForFunction(()=>document.querySelectorAll('.oj-problem').length===51&&!document.querySelector('#ojBinding').hidden);
+ assert.equal(await p.locator('#ojTree').getByText('未提交',{exact:true}).count(),0);assert.equal(await p.locator('#path').isVisible(),false);
+ const layout=await p.evaluate(()=>{const tree=document.querySelector('#ojTree'),first=tree.firstElementChild,last=tree.lastElementChild;return {height:tree.clientHeight,content:tree.scrollHeight,first:first.getBoundingClientRect().top,last:last.getBoundingClientRect().bottom,top:tree.getBoundingClientRect().top,bottom:tree.getBoundingClientRect().bottom}});
+ assert.ok(layout.content<=layout.height+2,JSON.stringify(layout));assert.ok(layout.first>=layout.top&&layout.last<=layout.bottom,JSON.stringify(layout));
+});
+
+test('import preview and apply show indeterminate progress, block dismissal, and recover after failure',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.recentContests=[{id:'1359',title:'期末复习赛',start:'2026-11-27',status:'进行中'}];fixture.holdPreview=true;fixture.holdApply=true});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();
+ async function startPreview(){await p.locator('#ojImport').click();await p.locator('.recent-contest').click();await p.locator('#ojImportConfirm').click();await p.locator('#ojImportProgress').waitFor()}
+ await startPreview();
+ assert.match(await p.locator('#ojImportProgressText').textContent(),/生成导入预览/);
+ assert.equal(await p.locator('#ojImportProgress progress').getAttribute('value'),null);
+ await p.keyboard.press('Escape');assert.equal(await p.locator('#ojImportProgress').isVisible(),true);
+ await p.evaluate(()=>fixture.failPreview());
+ await p.locator('#ojImportProgress').waitFor({state:'hidden'});
+ await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('获取比赛失败')&&!document.querySelector('#ojImport').disabled);
+ await startPreview();await p.evaluate(()=>fixture.finishPreview());await p.locator('#ojImportPreview').waitFor();
+ assert.equal(await p.locator('#ojImportProgress').isVisible(),false);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJApplyImport').length),0);
+ await p.locator('#ojPreviewConfirm').click();await p.locator('#ojImportProgress').waitFor();
+ assert.match(await p.locator('#ojImportProgressText').textContent(),/正在导入题目/);
+ await p.evaluate(()=>fixture.finishApply());await p.locator('#ojImportProgress').waitFor({state:'hidden'});
+ await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('导入完成 1 题')&&!document.querySelector('#ojImport').disabled);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJApplyImport').length),1);
+});

@@ -231,8 +231,8 @@ jobs:
           fi
   publish:
     needs: [package, installed, frontend, managed-adapter]
-    # Maintainer-authorized beta.5 only; later versions need explicit dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.6'))
+    # Maintainer-authorized first stable release; other versions require explicit dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -254,25 +254,28 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.6 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
-          if [[ "$version" == 0.1.0-beta.6 ]]; then
-            for spec in @routilet/routilet@0.1.8 @routilet/accoding-adapter@0.1.0-beta.2 @routilet/c-exam-kit@0.6.10; do
+          if [[ "$version" == 0.1.0 ]]; then
+            for spec in @routilet/routilet@0.1.8 @routilet/accoding-adapter@0.1.0 @routilet/c-exam-kit@0.6.10; do
               found=false
-              for attempt in 1 2 3 4 5 6; do
+              for attempt in $(seq 1 60); do
                 if npm view "$spec" version --registry=https://registry.npmjs.org/ | grep -Fx "${spec##*@}"; then found=true; break; fi
                 sleep 10
               done
               test "$found" = true
             done
           fi
-          if [[ "$version" == 0.1.0-beta.6 ]]; then
+          if [[ "$version" == 0.1.0 ]]; then
             code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in
-              200) echo "Approved beta.5 already published; no tag changes."; exit 0 ;;
+              200) test "$(npm view @routilet/companion dist-tags.latest --registry=https://registry.npmjs.org/)" = "$version"; echo "Stable version already published; no tag changes."; exit 0 ;;
               404) ;;
               *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
             esac
+          fi
+          if [[ "$version" == 0.1.0 ]]; then
+            test "$(npm view @routilet/accoding-adapter dist-tags.latest --registry=https://registry.npmjs.org/)" = 0.1.0
           fi
           npm publish "$archive" --access public --tag "$tag" --ignore-scripts
           echo "npm accepted @routilet/companion@$version ($tag); registry validation may take several minutes." >> "$GITHUB_STEP_SUMMARY"
@@ -283,4 +286,5 @@ jobs:
             fi
             sleep 10
           done
-          echo "::warning::npm accepted publication, but public registry visibility/tag is not yet verified; do not republish blindly."
+          echo "::error::npm accepted publication, but public registry visibility/tag is not yet verified; do not republish blindly."
+          exit 1
