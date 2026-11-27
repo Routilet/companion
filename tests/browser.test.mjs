@@ -35,6 +35,10 @@ async function setup(t){
    case 'OJCheckAdapter':case 'OJAccountStatus':return {available:state.ojAvailable??false,state:state.ojAvailable?'signed_in':'unavailable'};
    case 'OJBinding':return state.name==='A.c'?(state.ojBinding??null):null;
    case 'OJCachedJudges':return state.ojJudges??{};
+   case 'OJWorkspace':return {items:state.ojBinding?[{path:'/work/A.c',directory:'/work',group:'work',binding:state.ojBinding}]:[],limited:false};
+   case 'ReadLocalDocument':return state.document??null;
+   case 'OJRecentContests':return [];
+   case 'OJPollReceipt':return {id:args[0],result:'AC',language:'C'};
    case 'OJRefreshJudges':return 1;
    case 'OJUnbind':state.ojBinding=null;state.ojJudges={};return;
    case 'OJSubmissionAvailable':return !!state.ojAvailable&&!!state.ojBinding;
@@ -206,14 +210,14 @@ test('OJ cached state survives keyed tree refresh, explicit refresh is the only 
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',sourceUrl:'https://accoding.buaa.edu.cn/',target:{kind:'problemset'}};fixture.ojJudges={'/work/A.c':{status:{accepted:true,latest:{id:'12',result:'WA',language:'C'}},checked:'2026-11-27T00:00:00Z'}};fixture.names.push('B.c')});
  await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();
  await p.locator('#folderMenu summary').click();await p.locator('#refreshTree').click();
- await p.waitForFunction(()=>document.querySelector('.tree-judge:not([hidden])')?.textContent==='AC');
+ assert.equal(await p.locator('.tree-judge:not([hidden])').count(),0);
  await p.evaluate(()=>window.originalTreeButton=document.querySelector('.tree-item'));
  await p.evaluate(()=>fixture.names.push('C.c'));
  await p.waitForFunction(()=>document.querySelectorAll('.tree-item').length===3);
  assert.equal(await p.evaluate(()=>window.originalTreeButton===document.querySelector('.tree-item')),true);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges').length),0);
  await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.waitForFunction(()=>document.querySelector('#title').textContent==='B.c'&&!document.querySelector('#new').disabled);
- await p.locator('.tree-item').filter({hasText:'A.c'}).click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden&&!document.querySelector('#new').disabled);
+ await p.locator('.tree-item').filter({hasText:'A.c'}).click();await p.waitForFunction(()=>!document.querySelector('#new').disabled);await p.locator('#ojMode').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
  assert.match(await p.locator('#ojJudgeText').textContent(),/曾 AC.*WA/);
  await p.locator('#ojRefreshCurrent').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshJudges'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges')), [['OJRefreshJudges',['/work/A.c']]]);
@@ -224,7 +228,7 @@ test('OJ cached state survives keyed tree refresh, explicit refresh is the only 
 test('online submission in unified preview requires explicit language and confirmation',async t=>{
  const p=await setup(t);
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'problemset'}}});
- await p.locator('#copy').click();await p.locator('#ojSubmitPrepare').waitFor();
+ await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitPrepare').waitFor();
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),0);
  await p.locator('#ojSubmitPrepare').click();await p.locator('#ojSubmitConfirm').waitFor();
  assert.equal(await p.locator('#ojSubmitConfirm').isDisabled(),true);
@@ -237,13 +241,26 @@ test('unavailable Adapter hides all OJ entry points even for an existing binding
  const p=await setup(t);
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'题',label:'A',target:{kind:'problemset'}};fixture.ojJudges={'/work/A.c':{status:{accepted:true},checked:'2026-11-27T00:00:00Z'}}});
  await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#ojAccountState').textContent.includes('已登录'));
- await p.locator('#closeConfig').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden&&!!document.querySelector('.tree-judge:not([hidden])'));
+ await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden&&!!document.querySelector('.oj-problem'));
  await p.evaluate(()=>fixture.ojAvailable=false);
  await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#ojLogin').disabled&&!document.querySelector('#ojCheckAgain').disabled);
  await p.locator('#closeConfig').click();await p.waitForFunction(()=>['ojImport','ojRefreshTree','ojBinding','ojBindingError','ojJudgeInfo'].every(id=>document.getElementById(id).hidden)&&!document.querySelector('.tree-judge:not([hidden])'));
  await p.locator('#copy').click();await p.locator('#preview').waitFor();assert.equal(await p.locator('#ojSubmitArea').isVisible(),false);assert.equal(await p.locator('#copyConfirm').isEnabled(),true);await p.locator('#closePreview').click();
  await p.evaluate(()=>fixture.ojAvailable=true);
  await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojCheckAgain').disabled);await p.locator('#ojCheckAgain').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);
- await p.locator('#closeConfig').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
+ await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJUnbind'||c[0]==='OJRefreshJudges').length),0);
+});
+
+test('offline document renders Markdown and math, no external image or HTML execution',async t=>{
+ const p=await setup(t);await p.evaluate(()=>fixture.document={name:'problem.md',content:'# 本地题面\n\n$x^2$\n\n![test](https://invalid.example/image.png)\n\n<script>throw Error("unsafe")</script>\n\n    1 2\n'});
+ await p.locator('#new').click();await p.locator('#actionCancel').click(); // refresh via source selection
+ await p.evaluate(()=>fixture.names.push('B.c'));await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.locator('#documentBtn').click();
+ await p.locator('#documentDialog .katex').waitFor();assert.equal(await p.locator('#documentBody img,#documentBody script').count(),0);
+ assert.match(await p.locator('#documentBody').textContent(),/此处有一张图片/);assert.equal(await p.locator('#ojMode').isVisible(),false)
+});
+test('detailed judge table uses actual line structure and concise signal guidance',async t=>{
+ const p=await setup(t);await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'contest',contestId:'42',problemId:'5'}};fixture.ojJudges={'/work/A.c':{status:{accepted:false,latest:{id:'12',result:'REG',language:'C',score:'0.5',detail:'12\nAccepted | 1 * (1 / 2) | 1 ms | 1852 KB\nRuntime Error (SIGSEGV) | 0 * (1 / 2) | 140 ms | 1752 KB\n'}},checked:'2026-11-27T00:00:00Z'}}});
+ await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojDetailBtn').click();
+ assert.match(await p.locator('#ojDetailBody').textContent(),/SIGSEGV.*非法内存访问/);assert.equal(await p.locator('#ojDetailBody tr').count(),3)
 });

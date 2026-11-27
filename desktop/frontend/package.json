@@ -1,1 +1,13 @@
-{"name":"companion-next-desktop","private":true,"type":"module","scripts":{"build":"tsc -p tsconfig.json && node build.mjs"},"devDependencies":{"typescript":"5.9.3"}}
+{
+  "name": "companion-next-desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "markdown-it": "14.2.0",
+    "katex": "0.16.47"
+  }
+}
