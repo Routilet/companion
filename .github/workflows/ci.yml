@@ -42,7 +42,7 @@ jobs:
       - name: Build frontend
         working-directory: desktop/frontend
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           npm run build
       - name: Build actual Exam Kit data package
         working-directory: exam-kit-fixture/npm/accoding-preset
@@ -50,14 +50,16 @@ jobs:
       - name: Download verified Observer 0.2.0 release fixture
         run: node scripts/fetch-observer-fixture.mjs observer-fixture
       - name: Resolve Go dependencies
-        run: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - name: Core tests and vet
         env:
           COMPANION_TEST_OBSERVER_PACKAGE: ${{ github.workspace }}/observer-fixture/package
           COMPANION_TEST_KIT_PACKAGE: ${{ github.workspace }}/exam-kit-fixture/npm/accoding-preset
         run: |
-          go test -v ./internal/localrun ./cmd/companion
-          go vet ./internal/localrun ./cmd/companion
+          go test -mod=readonly -v ./internal/localrun ./cmd/companion
+          go vet -mod=readonly ./internal/localrun ./cmd/companion
       - name: Windows GUI
         if: runner.os == 'Windows'
         shell: pwsh

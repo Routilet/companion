@@ -11,7 +11,7 @@
 
 ## 构建与验收
 
-Go 1.26、Node 22、已有 GCC/Clang。desktop/frontend 执行 npm install --ignore-scripts --no-audit --no-fund && npm run build；next/ 执行 go mod tidy、go test ./internal/localrun ./cmd/companion、go vet ./internal/localrun ./cmd/companion、go build -tags production ./desktop。独立双平台 CI 仅上传开发 ZIP，依赖锁随 CI 产物。未发布。
+Go 1.26、Node 22、已有 GCC/Clang。desktop/frontend 执行 npm ci --ignore-scripts --no-audit --no-fund && npm run build；next/ 执行 go mod tidy、go test ./internal/localrun ./cmd/companion、go vet ./internal/localrun ./cmd/companion、go build -tags production ./desktop。独立双平台 CI 仅上传开发 ZIP，依赖锁随 CI 产物。未发布。
 
 人工验收：拖入单文件/目录、取消未保存切换、重开恢复子目录选中、编译器设置跨重启；指定编辑器路径并打开、打开所在目录；复制原样源码、预览期间外部修改则拒绝复制、未通过全部比较仍允许明确复制；批量运行观察完成数及取消；Unicode 差异、多处差异及长输出降级。CLI stdout/退出码、无写入行为。真机 Windows/macOS 未验收。
 
@@ -49,3 +49,5 @@ CI 使用固定真实 Exam Kit 构建产物，验证目录结构、实际条目�
 “观察当前样例”冻结磁盘当前 C 源码及所选已保存样例；未保存样例先保存，空列表使用空 stdin。不是历史测试快照。普通 C 复制原字节；Kit 使用同一次 PrepareSource 的组件选择和行映射，以 #line、sourceMap、skipSourcePaths 标识生成组件与冻结用户源码，恢复原始用户行以匹配 Observer 的源文本校验。Kit include 行含注释时保守拒绝观察。传 -lm，不传正式评测 -O2，Observer 使用自己的 -g -O0。workDir 为原目录，stdin/expected 分文件，null 省略，空字符串创建空文件；comparison=trim-line-end。无账号或 OJ。一次只启动一个独立观察窗口，进程退出后清理会话；Companion 关闭时等待 Observer 退出以保留冻结数据并避免强杀调试器，建议先关闭 Observer。启动/退出错误提示，程序本身运行结果由 Observer 展示。强制结束 Companion 可能遗留临时文件。工具链和 Windows ANSI 路径限制由 Observer 检查；非安全沙箱。
 
 验收：用正式 0.2.0 包，普通 C 与 Kit C 分别观察有预期、无预期及空预期样例；检查真实 LLDB/GDB 源码映射、辅助组件跳过、-lm、取消、重跑与关闭，外部保存不改变冻结版本，返回后可继续测试。自动测试覆盖 manifest、能力探测、session 及冻结源码，不等价于 GUI 真机联调。Routilet 正式安装发现留 06；未合并未发布。
+
+迁移后依赖锁以双平台 CI 的真实构建结果为准；不手工猜测校验值。
