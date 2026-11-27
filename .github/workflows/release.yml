@@ -17,6 +17,26 @@ concurrency:
   group: companion-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build actual frontend
+        working-directory: desktop/frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Browser regression without native JavaScript dialogs
+        run: |
+          npm install --prefix out/ui-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          node out/ui-test/node_modules/playwright/cli.js install --with-deps chromium
+          node --test tests/browser.test.mjs
   build:
     strategy:
       fail-fast: false
@@ -197,7 +217,7 @@ jobs:
             codesign --verify --strict out/install/node_modules/@routilet/companion/bin/darwin-arm64/Companion.app
           fi
   publish:
-    needs: [package, installed]
+    needs: [package, installed, frontend]
     # One explicitly approved first beta. Other versions require manual dispatch.
     if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.1'))
     runs-on: ubuntu-latest
