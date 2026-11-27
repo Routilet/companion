@@ -1,0 +1,234 @@
+name: Companion native release
+on:
+  push:
+    branches: [main, feat/native-distribution]
+    paths: ['VERSION', '.github/workflows/release.yml', 'desktop/**', 'internal/**', 'cmd/**', 'scripts/**', 'package.json', 'go.mod', 'go.sum']
+  pull_request:
+    branches: [main, feat/native-companion-migration]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Explicitly publish candidate to npm (main only)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: companion-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: win32-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Routilet/c-exam-kit
+          ref: f17f8715c6ca552b059da4f95969d956026e584a
+          path: exam-kit-fixture
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Locked frontend build
+        working-directory: desktop/frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Build actual Exam Kit fixture
+        working-directory: exam-kit-fixture/npm/accoding-preset
+        run: node scripts/build-preset.mjs
+      - name: Download actual Observer release
+        run: node scripts/fetch-observer-fixture.mjs observer-fixture
+      - name: Verify locked dependencies and core
+        shell: bash
+        env:
+          COMPANION_TEST_KIT_PACKAGE: ${{ github.workspace }}/exam-kit-fixture/npm/accoding-preset
+          COMPANION_TEST_OBSERVER_PACKAGE: ${{ github.workspace }}/observer-fixture/package
+        run: |
+          set -euo pipefail
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          go test -mod=readonly -v ./internal/localrun ./cmd/companion
+          go vet -mod=readonly ./internal/localrun ./cmd/companion
+      - name: Native application icons
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix out/icon-tools --no-save --ignore-scripts --no-audit --no-fund @resvg/resvg-js@2.6.2
+          node scripts/generate-icons.cjs
+          test -s desktop/frontend/dist/icons/companion.png
+          if [[ "$TARGET" == win32-x64 ]]; then
+            go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -ico out/icons/Companion.ico -o desktop/companion_windows_amd64.syso
+          else
+            iconutil -c icns out/icons/Companion.iconset -o out/icons/Companion.icns
+          fi
+      - name: Build native GUI and CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          stage="out/native/$TARGET"
+          mkdir -p "$stage/bin"
+          if [[ "$TARGET" == win32-x64 ]]; then
+            export CGO_ENABLED=0
+            go build -mod=readonly -tags production -trimpath -ldflags "-s -w -H windowsgui -X main.buildVersion=$version" -o "$stage/bin/companion.exe" ./desktop
+            go build -mod=readonly -trimpath -o "$stage/bin/companion-cli.exe" ./cmd/companion
+          else
+            export CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=12.0
+            app="$stage/bin/Companion.app"
+            mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+            cp desktop/Info.plist "$app/Contents/Info.plist"
+            cp out/icons/Companion.icns "$app/Contents/Resources/"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${version%%-*}" "$app/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${version%%-*}" "$app/Contents/Info.plist"
+            go build -mod=readonly -tags production -trimpath -ldflags "-s -w -X main.buildVersion=$version" -o "$app/Contents/MacOS/companion" ./desktop
+            codesign --force --sign - "$app"
+            codesign --verify --strict "$app"
+            go build -mod=readonly -trimpath -o "$stage/bin/companion-cli" ./cmd/companion
+          fi
+          node scripts/native-notices.mjs "$stage/GUI-NOTICES.txt" "$stage/CLI-NOTICES.txt"
+          tar -czf "out/native-$TARGET.tar.gz" -C "$stage" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: out/native-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.candidate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts
+      - name: Assemble reviewed native npm tarball
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in win32-x64 darwin-arm64; do
+            mkdir -p "out/native/$target"
+            tar -xzf "artifacts/native-$target/native-$target.tar.gz" -C "out/native/$target"
+          done
+          node scripts/package-release.mjs
+          (cd release && sha256sum *.tgz > SHA256SUMS)
+          printf 'version=%s\n' "$(tr -d '\r\n' < VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-npm-candidate
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+  installed:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2025, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: companion-npm-candidate
+          path: release
+      - name: Install exact tarball using pnpm like Routilet
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/ci-pnpm/extracted
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            archive=pnpm-win32-x64.zip
+            digest=0a9c1bc147202089b12d91f43349f6f9ae26df191ee704dee313ba3f9a0a8ffe
+          else
+            archive=pnpm-darwin-arm64.tar.gz
+            digest=af43c44f22ef89191d83163c3ef9f5ee021a7368f401c95d92731be7d6b21cc5
+          fi
+          curl --fail --location --retry 3 "https://github.com/pnpm/pnpm/releases/download/v12.22.0/$archive" -o "out/ci-pnpm/$archive"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            printf '%s  %s\n' "$digest" "out/ci-pnpm/$archive" | sha256sum -c -
+            unzip -q "out/ci-pnpm/$archive" -d out/ci-pnpm/extracted
+            bin="$(find out/ci-pnpm/extracted -type f -iname 'pnpm*.exe' | head -n1)"
+            test -n "$bin"
+            cp "$bin" out/ci-pnpm/pnpm.exe
+          else
+            printf '%s  %s\n' "$digest" "out/ci-pnpm/$archive" | shasum -a 256 -c -
+            tar -xzf "out/ci-pnpm/$archive" -C out/ci-pnpm/extracted
+            bin="$(find out/ci-pnpm/extracted -type f \( -name pnpm -o -name pnpm-darwin-arm64 \) | head -n1)"
+            test -n "$bin"
+            cp "$bin" out/ci-pnpm/pnpm
+            chmod +x out/ci-pnpm/pnpm
+          fi
+          node scripts/install-candidate.mjs
+          node scripts/verify-package.mjs out/install/node_modules/@routilet/companion
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            codesign --verify --strict out/install/node_modules/@routilet/companion/bin/darwin-arm64/Companion.app
+          fi
+  publish:
+    needs: [package, installed]
+    # One explicitly approved first beta. Other versions require manual dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.1'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+      - uses: actions/download-artifact@v4
+        with:
+          name: companion-npm-candidate
+          path: release
+      - name: Publish verified candidate with OIDC
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum -c SHA256SUMS
+          archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
+          version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.1 ]]; then exit 1; fi
+          if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
+            case "$code" in
+              200) echo "Approved beta already published; no tag changes."; exit 0 ;;
+              404) ;;
+              *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
+            esac
+          fi
+          npm publish "$archive" --access public --tag "$tag" --ignore-scripts

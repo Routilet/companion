@@ -1,0 +1,10 @@
+/desktop/frontend/dist/
+/desktop/frontend/node_modules/
+/out/
+
+/observer-fixture/
+
+/exam-kit-fixture/
+
+/release/
+/desktop/*.syso

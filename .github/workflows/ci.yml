@@ -1,0 +1,117 @@
+name: Companion native CI (no publishing)
+on:
+  push:
+    branches: [feat/native-companion-migration]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: companion-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: windows-2025
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Routilet/c-exam-kit
+          ref: f17f8715c6ca552b059da4f95969d956026e584a
+          path: exam-kit-fixture
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build frontend
+        working-directory: desktop/frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Build actual Exam Kit data package
+        working-directory: exam-kit-fixture/npm/accoding-preset
+        run: node scripts/build-preset.mjs
+      - name: Download verified Observer 0.2.0 release fixture
+        run: node scripts/fetch-observer-fixture.mjs observer-fixture
+      - name: Resolve Go dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: Core tests and vet
+        env:
+          COMPANION_TEST_OBSERVER_PACKAGE: ${{ github.workspace }}/observer-fixture/package
+          COMPANION_TEST_KIT_PACKAGE: ${{ github.workspace }}/exam-kit-fixture/npm/accoding-preset
+        run: |
+          go test -mod=readonly -v ./internal/localrun ./cmd/companion
+          go vet -mod=readonly ./internal/localrun ./cmd/companion
+      - name: Windows GUI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          go build -mod=readonly -tags production -trimpath -ldflags "-s -w -H windowsgui" -o out/companion.exe ./desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go build -mod=readonly -trimpath -o out/companion-cli.exe ./cmd/companion
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path out/companion.exe,out/companion-cli.exe -DestinationPath out/companion-windows-amd64.zip
+      - name: Apple Silicon GUI
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+          MACOSX_DEPLOYMENT_TARGET: '12.0'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          app="out/Companion.app"
+          mkdir -p "$app/Contents/MacOS"
+          go build -mod=readonly -tags production -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/companion" ./desktop
+          cp desktop/Info.plist "$app/Contents/Info.plist"
+          codesign --force --sign - "$app"
+          codesign --verify --strict "$app"
+          go build -mod=readonly -trimpath -o out/companion-cli ./cmd/companion
+          ditto -c -k --keepParent "$app" out/companion-macos-arm64.zip
+          ditto -c -k --keepParent out/companion-cli out/companion-cli-macos-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-ci-${{ matrix.os }}-${{ matrix.arch }}
+          path: out/*.zip
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-ci-locks-${{ matrix.os }}
+          path: |
+            go.mod
+            go.sum
+            desktop/frontend/package-lock.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: companion-ci-exam-kit-preview
+          path: |
+            exam-kit-fixture/npm/accoding-preset/package.json
+            exam-kit-fixture/npm/accoding-preset/LICENSE
+            exam-kit-fixture/npm/accoding-preset/preset/
+          if-no-files-found: error
+          retention-days: 7
