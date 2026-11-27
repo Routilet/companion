@@ -41,7 +41,7 @@ async function setup(t){
    case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
    case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:['C']},title:'测试题',label:'A',nickname:'fixture'};
    case 'OJSendSubmission':return {id:'12',result:'AC',accountId:'7',language:'C'};
-   case 'Version':return '0.1.0-beta.2';
+   case 'Version':return '0.1.0-beta.3';
    case 'Config':return {c:'',cpp:'',editor:'',root,selected:'A.c'};
    case 'ConfigWarning':return '';
    case 'Initial':return nav();

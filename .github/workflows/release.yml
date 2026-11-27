@@ -17,6 +17,8 @@ concurrency:
   group: companion-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  managed-adapter:
+    uses: ./.github/workflows/adapter-host.yml
   frontend:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -217,9 +219,9 @@ jobs:
             codesign --verify --strict out/install/node_modules/@routilet/companion/bin/darwin-arm64/Companion.app
           fi
   publish:
-    needs: [package, installed, frontend]
-    # Only explicitly approved beta.2. Other versions require manual dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.2'))
+    needs: [package, installed, frontend, managed-adapter]
+    # Maintainer-authorized beta.3 only; later versions need explicit dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.3'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -241,14 +243,33 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.2 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.3 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
+          if [[ "$version" == 0.1.0-beta.3 ]]; then
+            for spec in @routilet/routilet@0.1.6 @routilet/accoding-adapter@0.1.0-beta.1; do
+              found=false
+              for attempt in 1 2 3 4 5 6; do
+                if npm view "$spec" version --registry=https://registry.npmjs.org/ | grep -Fx "${spec##*@}"; then found=true; break; fi
+                sleep 10
+              done
+              test "$found" = true
+            done
+          fi
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
             code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in
-              200) echo "Approved beta.2 already published; no tag changes."; exit 0 ;;
+              200) echo "Approved beta.3 already published; no tag changes."; exit 0 ;;
               404) ;;
               *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
             esac
           fi
           npm publish "$archive" --access public --tag "$tag" --ignore-scripts
+          for attempt in 1 2 3 4 5 6; do
+            if [[ "$(npm view "@routilet/companion@$version" version --registry=https://registry.npmjs.org/)" == "$version" ]] && [[ "$(npm view @routilet/companion "dist-tags.$tag" --registry=https://registry.npmjs.org/)" == "$version" ]]; then
+              echo "Verified @routilet/companion@$version ($tag)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Publication succeeded but registry visibility/tag not yet verified" >&2
+          exit 1

@@ -11,6 +11,7 @@ on:
       - 'go.mod'
       - 'go.sum'
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -34,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Routilet/routilet
-          ref: 58bfc7ca4dc3275cecd5e7a94c9645ed38eaa3a1
+          ref: 0405ed8d8c6bf041a01e202e35ccdd500fca36d3
           path: manager-fixture
           persist-credentials: false
       - uses: actions/setup-go@v5
