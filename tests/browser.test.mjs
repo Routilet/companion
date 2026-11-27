@@ -37,7 +37,9 @@ async function setup(t){
    case 'OJCachedJudges':return state.ojJudges??{};
    case 'OJRefreshJudges':return 1;
    case 'OJUnbind':state.ojBinding=null;state.ojJudges={};return;
-   case 'OJSubmissionAvailable':return !!state.ojBinding;
+   case 'OJSubmissionAvailable':return !!state.ojAvailable&&!!state.ojBinding;
+   case 'KitStatus':return {version:'0.6.10',path:''};
+   case 'ObserverStatus':return {available:false};
    case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
    case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:['C']},title:'测试题',label:'A',nickname:'fixture'};
    case 'OJSendSubmission':return {id:'12',result:'AC',accountId:'7',language:'C'};
@@ -228,4 +230,19 @@ test('online submission in unified preview requires explicit language and confir
  await p.locator('#ojSubmitLanguage').selectOption('C');await p.locator('#ojSubmitConfirm').click();
  await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('#12'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission')), [['OJSendSubmission','','fixture-digest','fixture-token','C']]);
+});
+
+test('unavailable Adapter hides all OJ entry points even for an existing binding',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'题',label:'A',target:{kind:'problemset'}};fixture.ojJudges={'/work/A.c':{status:{accepted:true},checked:'2026-11-27T00:00:00Z'}}});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#ojAccountState').textContent.includes('已登录'));
+ await p.locator('#closeConfig').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden&&!!document.querySelector('.tree-judge:not([hidden])'));
+ await p.evaluate(()=>fixture.ojAvailable=false);
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#ojLogin').disabled&&!document.querySelector('#ojCheckAgain').disabled);
+ await p.locator('#closeConfig').click();await p.waitForFunction(()=>['ojImport','ojRefreshTree','ojBinding','ojBindingError','ojJudgeInfo'].every(id=>document.getElementById(id).hidden)&&!document.querySelector('.tree-judge:not([hidden])'));
+ await p.locator('#copy').click();await p.locator('#preview').waitFor();assert.equal(await p.locator('#ojSubmitArea').isVisible(),false);assert.equal(await p.locator('#copyConfirm').isEnabled(),true);await p.locator('#closePreview').click();
+ await p.evaluate(()=>fixture.ojAvailable=true);
+ await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojCheckAgain').disabled);await p.locator('#ojCheckAgain').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);
+ await p.locator('#closeConfig').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJUnbind'||c[0]==='OJRefreshJudges').length),0);
 });

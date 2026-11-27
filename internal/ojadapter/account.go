@@ -71,7 +71,7 @@ func NewManagedAccounts(manager, preview string) *Accounts {
 }
 
 func (a *Accounts) available() bool {
- if a.manager!="" {return a.managedAvailable||a.session!=nil}
+ if a.manager!="" {return a.managedAvailable}
  if !filepath.IsAbs(a.executable) {
 		return false
 	}
@@ -85,7 +85,7 @@ func (a *Accounts) checkAvailable(ctx context.Context) bool {
  err:=checkManaged(ctx,a.manager)
  a.managedAvailable=err==nil
  a.unavailableReason=""
- if err!=nil {a.unavailableReason=err.Error()}
+ if err!=nil {a.unavailableReason=err.Error();a.reset()}
  return a.managedAvailable
 }
 func (a *Accounts) CheckAvailability(ctx context.Context) AccountView {
@@ -150,6 +150,7 @@ func (a *Accounts) ensure(ctx context.Context) error {
 	}
 	if !m["account"] || !m["login"] || !m["logout"] {
 		s.Close()
+        if a.manager!="" {a.managedAvailable=false;a.unavailableReason="Adapter 不支持账号管理，请更新 Adapter"}
 		return errors.New("Adapter 不支持账号管理")
 	}
 	a.session = s
@@ -200,7 +201,7 @@ func (a *Accounts) login(ctx context.Context, c credentials, remember bool) (Acc
 		return a.view(), errors.New("请输入有效账号和密码")
 	}
 	if a.closed || !a.checkAvailable(ctx) {
-  return a.view(), errors.New("Accoding Adapter 不可用，请在 Routilet 检查安装与启用状态")
+  v:=a.view();return v, errors.New(v.UnavailableReason)
  }
 	if remember && !a.store.Supported() {
 		return a.view(), errCredentialStore
@@ -246,7 +247,7 @@ func (a *Accounts) Restore(ctx context.Context) (AccountView, error) {
 	ctx, done := a.context(ctx)
 	defer done()
 	if a.closed || !a.checkAvailable(ctx) {
-  return a.view(), errors.New("Accoding Adapter 不可用，请在 Routilet 检查安装与启用状态")
+  v:=a.view();return v, errors.New(v.UnavailableReason)
  }
 	if !a.store.Supported() {
 		return a.view(), errCredentialStore
