@@ -50,8 +50,9 @@ func TestKitVersionsAndIntegrity(t *testing.T){
 }
 func TestKitValidationAndMissing(t *testing.T){
  root,e:=OpenDirectory(t.TempDir());if e!=nil{t.Fatal(e)}
- if _,e=CreateSourceWithKit(root,root,"A.c","");e==nil{t.Fatal("missing package accepted")}
- if _,e=os.Stat(filepath.Join(root,"A.c"));!os.IsNotExist(e){t.Fatal("source created on resource failure")}
+ plain,e:=CreateSourceWithKit(root,root,"A.c","");if e!=nil{t.Fatal(e)}
+ data,e:=os.ReadFile(plain.Path);if e!=nil||!strings.HasPrefix(string(data),"#include <stdio.h>")||strings.Contains(string(data),"expanded.h"){t.Fatal(string(data),e)}
+ if _,e=CreateSourceWithKit(root,root,"broken.c",filepath.Join(root,"missing-kit"));e==nil{t.Fatal("invalid explicit package accepted")}
  if _,e=CreateSourceWithKit(root,root,"A.cpp","");e!=nil{t.Fatal(e)}
  pkg:=kitFixture(t,"1.0.0");k,e:=LoadKitPackage(pkg);if e!=nil{t.Fatal(e)}
  if _,e=SaveKitSnapshot(root,k);e!=nil{t.Fatal(e)}
