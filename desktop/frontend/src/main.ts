@@ -216,10 +216,10 @@ function renderResult(){
   }else wrap.append(output(past?"上次实际输出":"",c.process.stdout));
   if(c.process.stderr)wrap.append(output("标准错误",c.process.stderr));
  }
- for(const x of r.diagnostics??[]){const d=node("div","","diagnostic");d.append(node("p",x.severity+" · "+(x.file?x.file+":"+x.line+"："+x.message:x.message)));const more=document.createElement("details");more.append(node("summary","完整诊断"),node("pre",x.raw));d.append(more);diag.append(d)}
+ for(const x of r.diagnostics??[]){const d=node("div","","diagnostic");d.append(node("p",x.severity+" · "+(x.file?x.file.split(/[\\/]/).at(-1)+":"+x.line+"："+x.message:x.message)));const more=document.createElement("details");more.append(node("summary","完整诊断"),node("pre",x.raw));d.append(more);diag.append(d)}
  if(r.compilation.stdout)diag.append(output("编译输出",r.compilation.stdout));
  if(!diag.childElementCount&&r.compilation.stderr)diag.append(output("编译错误",r.compilation.stderr));
- el("diagnosticsSection").hidden=!diag.childElementCount;
+ el("diagnosticsSection").hidden=!diag.childElementCount;el("diagnosticSummary").textContent="编译诊断"+(r.diagnostics?.length?" · "+r.diagnostics.length+" 条":"");el<HTMLDetailsElement>("diagnosticsSection").open=r.state==="compilation_failed"||(r.diagnostics??[]).some(x=>x.severity.toLowerCase().includes("error"));
 }
 function show(r:Result){last=r;rawResult=false;editingExpected=false;status.textContent="";renderTabs();renderResult()}
 btn("rawToggle").onclick=()=>{rawResult=!rawResult;renderResult()};btn("editExpected").onclick=()=>{editingExpected=true;renderResult();expected.focus()};
