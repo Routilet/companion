@@ -48,6 +48,9 @@ async function setup(t){
    case 'CheckSelected':return true;
    case 'TakeDrop':return null;
    case 'Invalidate':case 'StoreConfig':return;
+   case 'ChooseCreateDirectory':return '/other';
+   case 'DetectEditors':return [{name:'VS Code',path:'/apps/code'}];
+   case 'OpenEditor':return;
    case 'Create':
     if(state.failCreate)throw Error('文件已存在');
     state.name=args[1];state.names.push(state.name);state.cases=[];state.revision='missing';return nav();
@@ -155,4 +158,14 @@ test('batch results follow selected sample, compare once, and edits invalidate p
  assert.equal(await p.locator('#results .snapshot').count(),1);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='SaveCases').length),1);
  assert.equal(await p.locator('#saved').textContent(),'未保存');
+});
+
+test('explicit new location and editor detection do not depend on system default',async t=>{
+ const p=await setup(t);
+ await p.locator('#new').click();assert.equal(await p.locator('#actionDirectory').textContent(),'/work');
+ await p.locator('#actionBrowse').click();await p.waitForFunction(()=>document.querySelector('#actionDirectory').textContent==='/other');
+ await p.locator('#actionCancel').click();await p.waitForFunction(()=>!document.querySelector('#new').disabled);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='Create').length),0);
+ await p.locator('#openEditor').click();await p.waitForFunction(()=>document.querySelector('#openEditor').textContent.includes('VS Code'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='OpenEditor')),['OpenEditor','/apps/code']);
 });

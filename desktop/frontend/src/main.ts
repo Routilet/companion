@@ -24,6 +24,7 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById
 const btn=(id:string)=>el<HTMLButtonElement>(id);
 const dialogs=installDialogs();
 const input=el<HTMLTextAreaElement>("input"),expected=el<HTMLTextAreaElement>("expected"),compare=el<HTMLInputElement>("compare"),compiler=el<HTMLInputElement>("compiler");
+const expansionByRoot=new Map<string,Set<string>>();
 let root="",expanded=new Set<string>(),treeEntries=new Map<string,Entry[]>(),refreshing=false,navEpoch=0,seenMissing=new Set<string>();
 const compilerByLanguage:Record<string,string>={c:"",cpp:""};
 let observing=false,observerPolling=false,rawResult=false;
@@ -39,7 +40,7 @@ async function call<T>(method:string,...args:unknown[]):Promise<T>{
 function markStale(){if(last&&!last.stale){last.stale=true;renderTabs();renderResult()}}
 function changes(){dirty=true;markStale();updateControls();}
 function updateControls(){
- btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("editorOptions").disabled=busy||!source;btn("new").disabled=busy||!runtime;btn("refreshTree").disabled=busy||!root;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
+ btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("editorOptions").disabled=busy||!source;btn("new").disabled=busy||!runtime;btn("refreshTree").disabled=busy||!root;btn("locateFile").disabled=busy||!source;btn("collapseTree").disabled=busy||!root;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
  btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
@@ -68,7 +69,7 @@ async function reload(){loaded=false;updateControls();try{applySet(await call<Ca
 async function select(nav:Nav){
  if(!nav.root)return;
  navEpoch++;
- if(root!==nav.root){root=nav.root;expanded=new Set([root]);treeEntries.clear();seenMissing.clear()}
+ if(root!==nav.root){if(root)expansionByRoot.set(root,new Set(expanded));root=nav.root;expanded=new Set(expansionByRoot.get(root)??[root]);treeEntries.clear();seenMissing.clear()}
  el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
  el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
@@ -85,18 +86,48 @@ async function showOrphans(){
  for(const o of list){const b=document.createElement("button");b.textContent=o.name+" · "+o.count+" 组 · 恢复";b.onclick=()=>void navigate(async()=>{if(!await dialogs.confirm("复制旧样例到当前文件？原数据保留。"))return;applySet(await call<CaseSet>("Restore",o.name,revision));markStale();await showOrphans()});box.append(b)}
  }catch(e){box.append(node("p",String(e),"muted"))}
 }
+const fileNodes=new Map<string,{wrap:HTMLElement;row:HTMLElement;button:HTMLButtonElement;arrow:HTMLElement;icon:HTMLElement;name:HTMLElement;more:HTMLButtonElement;child:HTMLElement}>();
+const natural=new Intl.Collator(undefined,{numeric:true,sensitivity:"base"});
 function drawTree(){
- const host=el("file"),scroll=host.scrollTop;host.replaceChildren();
+ const host=el("file"),scroll=host.scrollTop,seen=new Set<string>();
  function branch(dir:string,container:HTMLElement,depth:number){
   if(depth>24)return;
-  for(const e of treeEntries.get(dir)??[]){
-   const row=node("div","","tree-row");const b=document.createElement("button");b.className="tree-item";b.textContent=(e.directory?(expanded.has(e.path)?"▾ ":"▸ "):"  ")+e.name;b.title=e.path;b.disabled=busy;b.setAttribute("aria-current",String(source?.path===e.path));
-   if(e.directory){b.onclick=()=>{if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);void refreshTree(true)}}}else{b.onclick=()=>void navigate(async()=>select(await call<Nav>("Select",e.path)))}
-   row.append(b);if(!e.directory&&source?.path===e.path){row.classList.add("selected");const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.title="当前文件操作";more.setAttribute("aria-label","当前文件操作");more.disabled=busy;more.onclick=()=>openFileMenu(more);b.oncontextmenu=ev=>{ev.preventDefault();if(!busy)openFileMenu(more)};row.append(more)}container.append(row);
-   if(e.directory&&expanded.has(e.path)){const child=node("div","","branch");container.append(child);branch(e.path,child,depth+1)}
+  const items=[...(treeEntries.get(dir)??[])].sort((a,b)=>Number(b.directory)-Number(a.directory)||natural.compare(a.name,b.name));
+  let cursor:ChildNode|null=container.firstChild;
+  for(const e of items){
+   seen.add(e.path);let n=fileNodes.get(e.path);
+   if(!n){
+    const wrap=node("div","","tree-node"),row=node("div","","tree-row");
+    const b=node("button","","tree-item") as HTMLButtonElement;b.type="button";
+    const arrow=node("span","","tree-arrow"),icon=node("span","","tree-icon"),name=node("span","","tree-name");
+    arrow.setAttribute("aria-hidden","true");icon.setAttribute("aria-hidden","true");
+    b.append(arrow,icon,name);const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.type="button";
+    const child=node("div","","branch");row.append(b,more);wrap.append(row,child);
+    n={wrap,row,button:b,arrow,icon,name,more,child};fileNodes.set(e.path,n)
+   }
+   const {wrap,row,button:b,arrow,icon,name,more,child}=n;
+   const isExpanded=e.directory&&expanded.has(e.path),isSelected=!e.directory&&source?.path===e.path;
+   row.classList.toggle("selected",isSelected);b.setAttribute("aria-current",String(isSelected));b.title=e.path;b.disabled=busy;
+   if(e.directory)b.setAttribute("aria-expanded",String(isExpanded));else b.removeAttribute("aria-expanded");
+   arrow.classList.toggle("expanded",isExpanded);arrow.classList.toggle("leaf",!e.directory);
+   icon.className="tree-icon "+(e.directory?"folder-icon":"source-icon");name.textContent=e.name;
+   b.onclick=()=>{if(e.directory){if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);drawTree();void refreshTree(true)}}else if(!isSelected)void navigate(async()=>select(await call<Nav>("Select",e.path)))};
+   more.hidden=!e.directory&&!isSelected;more.disabled=busy;more.title=e.directory?"文件夹操作":"当前文件操作";more.setAttribute("aria-label",more.title);
+   more.onclick=()=>openFileMenu(more,e);
+   b.oncontextmenu=ev=>{if(e.directory||isSelected){ev.preventDefault();if(!busy)openFileMenu(more,e)}};
+   child.hidden=!isExpanded;if(isExpanded)branch(e.path,child,depth+1);
+   if(wrap!==cursor)container.insertBefore(wrap,cursor);cursor=wrap.nextSibling;
   }
+  while(cursor){const next=cursor.nextSibling;cursor.remove();cursor=next}
  }
- if(root)branch(root,host,0);host.scrollTop=scroll;
+ if(root)branch(root,host,0);else host.replaceChildren();
+ for(const [path,n] of fileNodes)if(!seen.has(path)){n.wrap.remove();fileNodes.delete(path)}
+ host.scrollTop=scroll;
+}
+async function locateFile(){
+ if(!source)return;let dir=source.directory;
+ while(dir&&dir!==root){expanded.add(dir);const next=dir.replace(/[\\/][^\\/]+$/,"");if(next===dir||next.length<root.length)break;dir=next}
+ await refreshTree(true);drawTree();fileNodes.get(source.path)?.button.scrollIntoView({block:"nearest"});fileNodes.get(source.path)?.button.focus({preventScroll:true})
 }
 async function refreshTree(force=false){
  if(!root||refreshing||(!force&&busy)||(!force&&!fileMenu.hidden))return;
@@ -180,9 +211,9 @@ function renderResult(){
 }
 function show(r:Result){last=r;rawResult=false;status.textContent="";renderTabs();renderResult()}
 btn("rawToggle").onclick=()=>{rawResult=!rawResult;renderResult()};
-const fileMenu=el("fileMenu");let menuAnchor:HTMLElement|undefined;
+const fileMenu=el("fileMenu");let menuAnchor:HTMLElement|undefined,menuEntry:Entry|undefined;
 function closeFileMenu(){fileMenu.hidden=true;menuAnchor=undefined}
-function openFileMenu(anchor:HTMLElement){if(!fileMenu.hidden){closeFileMenu();return}menuAnchor=anchor;fileMenu.hidden=false;const box=anchor.getBoundingClientRect();fileMenu.style.left=Math.max(4,Math.min(box.right-fileMenu.offsetWidth,innerWidth-fileMenu.offsetWidth-4))+"px";fileMenu.style.top=Math.max(4,Math.min(box.bottom,innerHeight-fileMenu.offsetHeight-4))+"px";btn("rename").focus()}
+function openFileMenu(anchor:HTMLElement,entry:Entry){if(!fileMenu.hidden){closeFileMenu();return}menuAnchor=anchor;menuEntry=entry;btn("rename").hidden=entry.directory;btn("reveal").textContent=entry.directory?"打开文件夹":"打开所在目录";fileMenu.hidden=false;const box=anchor.getBoundingClientRect();fileMenu.style.left=Math.max(4,Math.min(box.right-fileMenu.offsetWidth,innerWidth-fileMenu.offsetWidth-4))+"px";fileMenu.style.top=Math.max(4,Math.min(box.bottom,innerHeight-fileMenu.offsetHeight-4))+"px";btn(entry.directory?"newHere":"rename").focus()}
 document.addEventListener("pointerdown",e=>{if(!fileMenu.hidden&&!fileMenu.contains(e.target as Node)&&!menuAnchor?.contains(e.target as Node))closeFileMenu();for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu[open]")))if(!d.contains(e.target as Node))d.open=false});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!fileMenu.hidden){const a=menuAnchor;closeFileMenu();a?.focus()}if(e.key==="Escape")for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu[open]")))d.open=false});
 fileMenu.addEventListener("click",()=>closeFileMenu());
@@ -206,6 +237,8 @@ btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("Cho
 btn("refreshTree").onclick=()=>void refreshTree(true);
 function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target)await select(await call<Nav>("Create",target.dir,target.name))})}
 btn("new").onclick=()=>void newFile();
+btn("newHere").onclick=()=>{const e=menuEntry;void newFile(e?.directory?e.path:source?.directory??root)};
+btn("locateFile").onclick=()=>void locateFile();btn("collapseTree").onclick=()=>{expanded=new Set([root]);drawTree()};
 btn("rename").onclick=()=>void navigate(async()=>{if(!source)return;const name=await dialogs.name("重命名文件","新文件名",source.name,"重命名");if(name&&name!==source.name)await select(await call<Nav>("Rename",name))});
 btn("import").onclick=()=>void navigate(async()=>{if(!loaded)return;const append=cases.length>0;if(append&&!await dialogs.confirm("将导入的测试数据追加到现有样例？"))return;const s=await call<CaseSet|null>("Import",revision,append);if(s){applySet(s);markStale();await showOrphans()}});
 setInterval(()=>{void refreshTree()},1500);
@@ -247,7 +280,7 @@ async function editorMenu(openAfter:boolean){
 }
 btn("openEditor").onclick=async()=>{if(!editorPath){await editorMenu(true);return}if(!await launchEditor(editorPath))await editorMenu(true)};
 btn("editorOptions").onclick=()=>void editorMenu(false);
-btn("reveal").onclick=async()=>{try{await call("Reveal")}catch(e){status.textContent=String(e)}};
+btn("reveal").onclick=async()=>{try{if(menuEntry?.directory)await call("RevealFolder",menuEntry.path);else await call("Reveal")}catch(e){status.textContent=String(e)}};
 btn("copy").onclick=async()=>{if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；仍可手动复制。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";preview.showModal()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};

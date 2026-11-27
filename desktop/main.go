@@ -72,6 +72,19 @@ func(d *Desktop) CopyManualExample(id,key,fingerprint string)error{
  if !d.native.Clipboard.SetText(example){return errors.New("无法写入系统剪贴板")}
  return nil
 }
+func(d *Desktop) CopyManualSignature(id,key,fingerprint,signature string)error{
+ d.mu.Lock()
+ if d.manual==nil||d.manual.Fingerprint!=fingerprint{d.mu.Unlock();return errors.New("手册已变化，请重新打开")}
+ m,e:=localrun.LoadManual(d.selected.Path,d.kitPackage)
+ if e!=nil||m.Fingerprint!=fingerprint||m.Origin!=d.manual.Origin||m.SourcePath!=d.manual.SourcePath{d.mu.Unlock();return errors.New("资源或当前文件已变化，请重新打开手册")}
+ valid:=false
+ for _,c:=range m.Reference.Categories{for _,entry:=range c.Entries{if entry.ID!=id{continue};signatures:=entry.Signatures
+  if len(entry.Variants)>0{signatures=nil;for _,v:=range entry.Variants{if v.Key==key{signatures=append(append([]string{},entry.CommonSignatures...),v.Signatures...);break}}}
+  for _,s:=range signatures{if s==signature{valid=true}}
+ }}
+ d.mu.Unlock();if !valid{return errors.New("未知函数接口")}
+ if !d.native.Clipboard.SetText(signature){return errors.New("无法写入系统剪贴板")};return nil
+}
 func(d *Desktop) ObserverStatus()localrun.ObserverInfo{
  d.mu.Lock();p:=d.managerPath;d.mu.Unlock()
  info,e:=localrun.ProbeManagedObserver(p);if e!=nil{return localrun.ObserverInfo{Error:e.Error()}}
@@ -120,6 +133,10 @@ func(d *Desktop) ChooseEditor()(string,error){
 func(d *Desktop) OpenEditor(editor string)error{
  d.mu.Lock();p:=d.selected.Path;d.mu.Unlock()
  return localrun.OpenEditor(p,editor)
+}
+func(d *Desktop) RevealFolder(path string)error{
+ d.mu.Lock();root:=d.root;d.mu.Unlock()
+ p,e:=localrun.Within(root,path);if e!=nil{return e};return localrun.RevealDirectory(p)
 }
 func(d *Desktop) Reveal()error{
  d.mu.Lock();p:=d.root;if d.selected.Path!=""{p=d.selected.Directory};d.mu.Unlock()
