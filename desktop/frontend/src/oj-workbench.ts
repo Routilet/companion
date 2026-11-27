@@ -35,6 +35,6 @@ export function installWorkbench(call:Call,choose:(path:string)=>void,changed:()
  btn("ojMode").onclick=()=>{if(!isBusy())show(true)};
  btn("ojRescan").onclick=()=>{if(!isBusy())changed()};
  function availability(v:boolean){available=v;btn("ojMode").hidden=!v;btn("filesMode").hidden=!v;if(active&&!v)show(false)}
- function controls(){if(!active)return;for(const b of Array.from(el("ojTree").querySelectorAll<HTMLButtonElement>("button")))b.disabled=isBusy();btn("ojRefreshTree").disabled=isBusy()||groupPaths().length===0;btn("ojRescan").disabled=isBusy()}
+ function controls(){if(!active)return;for(const b of Array.from(el("ojTree").querySelectorAll<HTMLButtonElement>("button")))b.disabled=isBusy();btn("ojRefreshTree").disabled=isBusy()||groupPaths().length===0;btn("ojRescan").disabled=isBusy();picker.disabled=isBusy()}
  return {active:()=>active,paths,groupPaths,scan,draw,availability,controls,needsScan:()=>!scanned,invalidate:()=>{scanned=false}}
 }

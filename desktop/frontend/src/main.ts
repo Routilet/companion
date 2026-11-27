@@ -47,14 +47,14 @@ async function call<T>(method:string,...args:unknown[]):Promise<T>{
 }
 function markStale(){if(last&&!last.stale){last.stale=true;renderTabs();renderResult()}}
 let saveTimer:ReturnType<typeof setTimeout>|undefined,saveFlight:Promise<void>|undefined,editGeneration=0,saveError="",editingExpected=false;
-function queueSave(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{if(!busy&&dirty&&loaded){void save().catch(()=>{})}},1000)}
+function queueSave(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{if(dirty&&loaded){if(busy||saveFlight)queueSave();else void save().catch(()=>{})}},1000)}
 function changes(){dirty=true;editGeneration++;markStale();updateControls();queueSave()}
 function updateControls(){
  btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy","previewSource"])btn(id).disabled=busy||!source;btn("editorOptions").disabled=busy||!source;btn("new").disabled=busy||!runtime;btn("refreshTree").disabled=busy||!root;btn("locateFile").disabled=busy||!source;btn("collapseTree").disabled=btn("newRootFolder").disabled=busy||!root;btn("ojImport").disabled=busy||!root;btn("ojRefreshTree").disabled=busy||!root;btn("ojRefreshCurrent").disabled=busy||!source;btn("ojSubmitBtn").disabled=busy||!source;btn("ojMode").disabled=btn("filesMode").disabled=busy;btn("ojOpenOriginal").disabled=btn("ojUnbind").disabled=busy||!source;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("save").hidden=!saveError;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
  btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest||cases.length<2;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
- workbench.controls();el("saved").textContent=!loaded?"读取失败":saveError?"保存失败："+saveError:saveFlight?"保存中":dirty?"未保存":"";el("saved").title=dirty?"运行前仍会按原规则保存；也可手动保存。":"";for(const b of Array.from(el("tabs").querySelectorAll<HTMLButtonElement>("button")))b.disabled=busy;
+ workbench.controls();el("saved").textContent=!loaded?"读取失败":saveError?"保存失败："+saveError:saveFlight?"保存中":dirty?"未保存":"";el("saved").title=dirty?"样例自动保存；失败时保留编辑内容。":"";for(const b of Array.from(el("tabs").querySelectorAll<HTMLButtonElement>("button")))b.disabled=busy;
 }
 function caseResult(index:number){return last?.cases.find(c=>c.index===index)}
 function matches(c:CaseResult,index:number){const current=cases[index]??{input:"",expected:null};return current.input===c.input&&current.expected===c.expected}
@@ -152,12 +152,12 @@ async function refreshTree(force=false){
   for(const [dir,entries] of next){const old=treeEntries.get(dir)??[];for(const e of old){if(!e.directory&&!present.has(e.path)){seenMissing.add(e.path);await call("Invalidate",e.path);if(epoch!==navEpoch)return}}}
   const changed=JSON.stringify([...next])!==JSON.stringify([...treeEntries]);treeEntries=next;if(changed||force)drawTree();
   el("treeNotice").textContent=queue.length?"展开目录过多，最多刷新 128 个目录。":"";el("treeNotice").hidden=!el("treeNotice").textContent;
-  if(source&&!busy){
+  if(source&&!busy&&!dirty&&!saveFlight){
    const selectedPath=source.path;const exists=await call<boolean>("CheckSelected");
    if(epoch!==navEpoch||source?.path!==selectedPath)return;
    if(!exists){seenMissing.add(selectedPath);markStale();loaded=false;updateControls();status.textContent="源文件已移走或删除；样例仍保留。"}
   }
-  if(last&&source&&!dirty&&!busy){const id=last.runId;if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id&&epoch===navEpoch)markStale()}
+  if(last&&source&&!dirty&&!busy&&!saveFlight){const id=last.runId;if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id&&epoch===navEpoch)markStale()}
  }catch(e){el("treeNotice").textContent=String(e);el("treeNotice").hidden=false;markStale()}finally{refreshing=false}
 }
 async function storeConfig(){try{await call("StoreConfig",compilerByLanguage.c.trim(),compilerByLanguage.cpp.trim(),editorPath.trim())}catch(e){status.textContent="配置保存失败："+String(e)}}
@@ -198,7 +198,7 @@ function renderResult(){
  result.hidden=false;const wrap=el("results"),diag=el("diagnostics");wrap.replaceChildren();diag.replaceChildren();
  el("diagnosticsSection").hidden=true;btn("rawToggle").hidden=true;el("batchSummary").textContent="";
  const current=cases[selected];const candidate=caseResult(selected);const tableMode=!!(last&&candidate&&candidate.difference&&candidate.expected!==null&&!last.stale&&matches(candidate,selected)&&!editingExpected);el("outputLayout").classList.toggle("comparison-mode",tableMode||!current);el("expectedEditor").hidden=!current||tableMode;btn("editExpected").hidden=!tableMode;stale.hidden=true;
- if(!last){el("resultTitle").textContent="实际输出";el("resultTitle").className="";el("resultMeta").textContent="";wrap.append(node("p","尚未运行","muted"));return}const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
+ if(!last){el("runDetails").hidden=true;el("resultTitle").textContent="实际输出";el("resultTitle").className="";el("resultMeta").textContent="";wrap.append(node("p","尚未运行","muted"));return}el("runDetails").hidden=false;const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
  stale.hidden=!r.stale&&!past;
  el("meta").textContent=r.compiler+(r.kitVersion?" · Exam Kit "+r.kitVersion+" · "+(r.components?.length??0)+" 个组件":"");
  const compared=r.cases.filter(c=>c.expected!==null),passed=compared.filter(c=>c.state==="passed").length;
@@ -212,7 +212,7 @@ function renderResult(){
    btn("rawToggle").hidden=false;btn("rawToggle").textContent=rawResult?"逐行对比":"原始文本";
    if(rawResult){const row=node("div","","outputs");row.append(output("预期",c.expected),output("实际",c.process.stdout));wrap.append(row)}
    else{wrap.append(comparison(c));wrap.append(node("p","首处差异 · 第 "+c.difference.line+" 行，第 "+c.difference.column+" 列","muted note"))}
-  }else wrap.append(output("",c.process.stdout));
+  }else wrap.append(output(past?"上次实际输出":"",c.process.stdout));
   if(c.process.stderr)wrap.append(output("标准错误",c.process.stderr));
  }
  for(const x of r.diagnostics??[]){const d=node("div","","diagnostic");d.append(node("p",x.severity+" · "+(x.file?x.file+":"+x.line+"："+x.message:x.message)));const more=document.createElement("details");more.append(node("summary","完整诊断"),node("pre",x.raw));d.append(more);diag.append(d)}
@@ -315,7 +315,7 @@ btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disa
 function showKit(k:KitStatus){el("kitStatus").textContent=k.error?"资源不可用："+k.error:"当前会话资源版本："+k.version}
 btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;config.showModal();ojAccount.open();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
 btn("closeConfig").onclick=()=>config.close();
-async function syncOJVisibility(){try{const a=await call<{available:boolean}>("OJAccountStatus");workbench.availability(a.available)}catch{workbench.availability(false)}await syncOJWorkspace();updateControls()}
+let lastAccountKey="";async function syncOJVisibility(){try{const a=await call<{available:boolean;id?:string;state?:string}>("OJAccountStatus");const key=a.available?(a.id??"")+":"+(a.state??""):"unavailable";if(key!==lastAccountKey){lastAccountKey=key;ojStatus.clear()}workbench.availability(a.available)}catch{ojStatus.clear();workbench.availability(false)}await syncOJWorkspace();updateControls()}
 config.addEventListener("close",()=>{void syncOJVisibility()});
 async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true;updateControls();try{await ojStatus.refresh(paths)}finally{busy=false;updateControls()}}
 btn("ojRefreshTree").onclick=()=>{void refreshOJ(workbench.groupPaths())};

@@ -35,6 +35,6 @@ export function installDocument(call:Call){
   try{const d=await call<DocumentData|null>("ReadLocalDocument");if(n===epoch){data=d;button.hidden=!d;el("title").classList.toggle("document-link",!!d);el("title").title=d?"阅读题面 / 文档":""}}catch{/* optional local document, ordinary testing unaffected */}
  }
  button.onclick=async()=>{try{const d=await call<DocumentData|null>("ReadLocalDocument");if(!d)return;data=d;el("documentTitle").textContent=data.name;body.replaceChildren();try{body.innerHTML=render(data.content)}catch{const pre=document.createElement("pre");pre.textContent=data.content;body.append(pre)}dialog.showModal()}catch(e){body.textContent=String(e);dialog.showModal()}};
- el("title").onclick=()=>{if(data)button.click()};el("documentClose").onclick=()=>dialog.close();
+ el("documentClose").onclick=()=>dialog.close();
  return {refresh,isOpen:()=>dialog.open}
 }
