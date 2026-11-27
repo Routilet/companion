@@ -26,3 +26,6 @@ Companion 是面向 C/C++ 课程的本地源码辅助工具，不是编辑器、
 ## 验收
 
 以普通 C 文件、已有平铺导入、新一题一目录及 51 题比赛验证：运行前后布局稳定，预期不重复，差异和旧结果可辨，键盘操作可达，保存冲突不丢数据，未安装 Adapter 仍可运行和阅读；提交确认与未决保护不变。Windows 11 amd64 / macOS arm64 构建、实际安装、浏览器回归与维护者原生窗口验收分开。参考 [Observer 产品定义](https://github.com/Routilet/c-observer/blob/main/docs/product.md) 和 [设计](https://github.com/Routilet/c-observer/blob/main/docs/design.md)。
+
+## 导入命名
+新比赛默认使用跨平台安全化后的标题，可在预览修改名称，重算本地计划而不重复请求 OJ。既有绑定匹配的平铺、旧 contest-ID 或改名目录优先复用；多个副本要求选定具体目录，不自动合并、重命名或覆盖。当前范围为选定导入位置及其直接比赛子目录。

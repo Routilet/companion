@@ -230,7 +230,7 @@ test('online submission in unified preview requires explicit language and confir
  await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitConfirm').waitFor();
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),0);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJPrepareSubmission').length),1);
- assert.equal(await p.locator('#ojSubmitConfirm').isDisabled(),true);
+ assert.equal(await p.locator('#ojSubmitLanguage').inputValue(),'C');assert.equal(await p.locator('#ojSubmitConfirm').isEnabled(),true);
  await p.locator('#ojSubmitLanguage').selectOption('C');await p.locator('#ojSubmitConfirm').click();
  await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('#12'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission')), [['OJSendSubmission','','fixture-digest','fixture-token','C']]);

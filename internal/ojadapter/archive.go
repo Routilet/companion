@@ -55,7 +55,7 @@ func validArchiveName(name string)bool{
 func titleArchiveName(title string)string{
  name:=strings.Map(func(r rune)rune{if unicode.IsControl(r)||strings.ContainsRune("/\\<>:\"|?*",r){return '-'};return r},title)
  name=strings.Trim(strings.TrimSpace(name),". ");for len(name)>140{_,n:=utf8.DecodeLastRuneInString(name);name=name[:len(name)-n]};name=strings.TrimRight(name,". ")
- if !validArchiveName(name){return "比赛 "+name};return name
+ if name==""{return "比赛"};if !validArchiveName(name){return "比赛 "+name};return name
 }
 // Check actual bound sources, not folder names. Reusing a renamed/legacy
 // archive preserves repairs; ambiguity fails closed rather than choosing a copy.
@@ -77,7 +77,7 @@ func archiveGroup(result ImportResult,dir,ext,requested string)(string,bool,erro
  // If the user selected the archive itself, never add a second outer folder.
  if ok,e:=matches(dir);e!=nil{return "",false,e}else if ok{return "",false,nil}
  found:=[]string{}
- for _,entry:=range entries{if !entry.IsDir()||entry.Type()&os.ModeSymlink!=0||strings.HasPrefix(entry.Name(),".")||strings.EqualFold(entry.Name(),"node_modules"){continue};if ok,e:=matches(filepath.Join(dir,entry.Name()));e!=nil{return "",false,e}else if ok{found=append(found,entry.Name())}}
+ for _,entry:=range entries{if !entry.IsDir()||entry.Type()&os.ModeSymlink!=0||strings.HasPrefix(entry.Name(),".")||strings.EqualFold(entry.Name(),"node_modules")||strings.HasSuffix(strings.ToLower(entry.Name()),".dsym"){continue};if ok,e:=matches(filepath.Join(dir,entry.Name()));e!=nil{return "",false,e}else if ok{found=append(found,entry.Name())}}
  if len(found)>1{return "",false,errors.New("存在多个同一比赛的本地副本，请选择具体比赛目录")}
  if len(found)==1{return found[0],false,nil}
  name:=requested;if name==""{name=titleArchiveName(result.Title)}

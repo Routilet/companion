@@ -150,7 +150,7 @@ async function refreshTree(force=false){
    for(const e of list){if(!e.directory)present.add(e.path);else if(expanded.has(e.path))queue.push(e.path)}
   }
   for(const [dir,entries] of next){const old=treeEntries.get(dir)??[];for(const e of old){if(!e.directory&&!present.has(e.path)){seenMissing.add(e.path);await call("Invalidate",e.path);if(epoch!==navEpoch)return}}}
-  const changed=JSON.stringify([...next])!==JSON.stringify([...treeEntries]);treeEntries=next;if(changed||force)drawTree();
+  const changed=JSON.stringify([...next])!==JSON.stringify([...treeEntries]);treeEntries=next;if(changed||force)drawTree();if(changed&&workbench.active()&&!busy&&!force){workbench.invalidate();void syncOJWorkspace()}
   el("treeNotice").textContent=queue.length?"展开目录过多，最多刷新 128 个目录。":"";el("treeNotice").hidden=!el("treeNotice").textContent;
   if(source&&!busy&&!dirty&&!saveFlight){
    const selectedPath=source.path;const exists=await call<boolean>("CheckSelected");
@@ -208,7 +208,7 @@ function renderResult(){
  el("resultMeta").textContent=c?c.process.elapsedMs+" ms"+(c.process.exitCode!==0?" · 退出码 "+c.process.exitCode:""):"";
  if(c){
   if(past){const frozen=document.createElement("details");frozen.className="snapshot";frozen.append(node("summary","历史运行快照（非当前样例）"),output("本次输入",c.input));if(c.expected!==null)frozen.append(output("本次预期",c.expected));wrap.append(frozen)}
-  if(tableMode&&c.expected!==null){
+  if(tableMode&&c.expected!==null&&c.difference){
    btn("rawToggle").hidden=false;btn("rawToggle").textContent=rawResult?"逐行对比":"原始文本";
    if(rawResult){const row=node("div","","outputs");row.append(output("预期",c.expected),output("实际",c.process.stdout));wrap.append(row)}
    else{wrap.append(comparison(c));wrap.append(node("p","首处差异 · 第 "+c.difference.line+" 行，第 "+c.difference.column+" 列","muted note"))}
@@ -289,7 +289,7 @@ type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");
 let editorChoices:EditorOption[]=[];let editorEpoch=0;
 function editorLabel(){return editorPath==="@system"?"系统默认编辑器":editorChoices.find(e=>e.path===editorPath)?.name??editorPath.split(/[\\/]/).at(-1)?.replace(/\.(exe|app)$/i,"")??""}
-function updateEditorLabel(){btn("openEditor").textContent=editorPath?"打开 · "+editorLabel():"打开编辑器"}
+function updateEditorLabel(){btn("openEditor").textContent="编辑";btn("openEditor").title=editorPath?"打开 "+editorLabel():"打开编辑器"}
 async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="已请求打开 "+editorLabel();return true}catch(e){status.textContent=String(e);return false}}
 async function editorMenu(openAfter:boolean){
  if(busy||!source||editorDialog.open)return;
@@ -307,7 +307,7 @@ async function editorMenu(openAfter:boolean){
 btn("openEditor").onclick=async()=>{if(!editorPath){await editorMenu(true);return}if(!await launchEditor(editorPath))await editorMenu(true)};
 btn("editorOptions").onclick=()=>void editorMenu(false);
 btn("reveal").onclick=async()=>{try{if(menuEntry?.directory)await call("RevealFolder",menuEntry.path);else await call("Reveal")}catch(e){status.textContent=String(e)}};
-async function openSubmission(online:boolean){if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；请核对后再复制或提交。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";el("previewTitle").textContent="复制提交源码";preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest,online)}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
+async function openSubmission(online:boolean){if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；请核对后再复制或提交。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";el("previewTitle").textContent="复制提交源码";preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest,online,source&&language(source)==="cpp"?"C++":"C")}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
 btn("previewSource").onclick=()=>void openSubmission(false);btn("copy").onclick=async()=>{if(busy||!source)return;busy=true;updateControls();try{const p=await call<Submission>("Prepare",compiler.value.trim());await call("CopyPrepared",compiler.value.trim(),p.digest);status.textContent=p.verified&&!dirty?"已复制":"已复制；当前源码未完整验证"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};btn("ojSubmitBtn").onclick=()=>void openSubmission(true);
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
