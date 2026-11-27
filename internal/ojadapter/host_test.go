@@ -119,10 +119,21 @@ func TestRealAdapter(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
-	if c := s.Capabilities(); len(c.Methods) != 4 || c.Methods[0] != "capabilities" {
+	if c := s.Capabilities(); len(c.Methods) != 6 || c.Methods[0] != "capabilities" {
 		t.Fatal(c)
 	}
+	var link struct {
+		Kind    string `json:"kind"`
+		ID      string `json:"id"`
+		Service string `json:"service,omitempty"`
+	}
+	if e = s.Call(context.Background(), "resolve", map[string]string{"url": "https://accoding.buaa.edu.cn/problem/42/index"}, &link); e != nil || link.ID != "42" || link.Kind != "problemset" {
+		t.Fatal(link, e)
+	}
 	var re *RemoteError
+	if e = s.Call(context.Background(), "import", map[string]string{"url": "https://accoding.buaa.edu.cn/problem/42/index"}, nil); !errors.As(e, &re) || re.Code != "auth" {
+		t.Fatal(e)
+	}
 	if e = s.Call(context.Background(), "submit", nil, nil); !errors.As(e, &re) || re.Code != "method_not_found" {
 		t.Fatal(e)
 	}

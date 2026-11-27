@@ -21,6 +21,8 @@ var assets embed.FS
 
 type Desktop struct{
  accounts *ojadapter.Accounts
+ ojPending *ojPending
+ ojSequence uint64
  native *application.App
  mu sync.Mutex
  selected localrun.Source
@@ -178,15 +180,19 @@ func(d *Desktop) Select(path string)(Navigation,error){
 func(d *Desktop) Create(dir,name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running{return Navigation{},errors.New("正在运行")}
- s,e:=localrun.CreateSourceWithKit(d.root,dir,name,d.kitPackage);if e!=nil{return Navigation{},e}
+ if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")}
+ p,e:=localrun.Within(d.root,dir);if e!=nil{return Navigation{},e};if b,e:=ojadapter.LoadBinding(filepath.Join(p,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
+ s,e:=localrun.CreateSourceWithKit(d.root,p,name,d.kitPackage);if e!=nil{return Navigation{},e}
  d.selected=s;return d.nav(),nil
 }
 func(d *Desktop) Rename(name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running||d.selected.Path==""{return Navigation{},errors.New("当前不能重命名")}
  old:=d.selected.Path
- s,e:=localrun.RenameSource(d.root,old,name);if e!=nil{return Navigation{},e}
- delete(d.last,old);delete(d.last,s.Path);d.selected=s;return d.nav(),nil
+ if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")};if _,e:=localrun.Within(d.root,old);e!=nil{return Navigation{},e}
+ var s localrun.Source
+ e:=ojadapter.RenameBound(old,filepath.Join(filepath.Dir(old),name),func()error{var err error;s,err=localrun.RenameSource(d.root,old,name);return err})
+ if s.Path!=""{delete(d.last,old);delete(d.last,s.Path);d.selected=s;d.prepared=nil};if e!=nil{return Navigation{},e};return d.nav(),nil
 }
 func(d *Desktop) Orphans()([]localrun.Orphan,error){
  d.mu.Lock();defer d.mu.Unlock()

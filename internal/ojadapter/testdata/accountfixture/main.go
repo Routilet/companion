@@ -22,7 +22,13 @@ func main() {
 		resp := map[string]any{"id": r.ID}
 		switch r.Method {
 		case "capabilities":
-			resp["result"] = map[string]any{"protocol": "routilet-oj-adapter/1", "adapter": "accoding", "version": "test", "methods": []string{"capabilities", "account", "login", "logout"}}
+			resp["result"] = map[string]any{"protocol": "routilet-oj-adapter/1", "adapter": "accoding", "version": "test", "methods": []string{"capabilities", "account", "login", "logout", "import"}}
+		case "import":
+			if user == "" {
+				resp["error"] = map[string]string{"code": "auth", "message": "login required"}
+				break
+			}
+			resp["result"] = map[string]any{"accountId": user, "title": "作业", "problems": []any{map[string]any{"title": "题", "label": "A", "target": map[string]string{"kind": "contest", "contestId": "42", "problemId": "5"}, "sourceUrl": "https://accoding.buaa.edu.cn/contest-ng/index.html#/42", "samples": []any{map[string]string{"input": "", "expected": ""}}, "warnings": []string{}, "special": false}}}
 		case "login":
 			user = ""
 			if r.Params["password"] != "test-secret" {

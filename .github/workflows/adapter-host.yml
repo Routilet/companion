@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Routilet/accoding-adapter
-          ref: e959f9a774cd26fd5932e46251a33b91a3b7a709
+          ref: b40f4a37a38a378ad8879ad40e5ceffeb542e8c8
           path: adapter-fixture
           persist-credentials: false
       - uses: actions/setup-go@v5
