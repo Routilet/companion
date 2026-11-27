@@ -1,0 +1,2 @@
+# beta.6 browser coverage
+Existing browser tests are retained; editor selection assertion observes tooltip rather than previous redundant visible editor name. New login and resource selection tests will be added to the executable suite.
