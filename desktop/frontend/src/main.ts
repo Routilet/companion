@@ -273,10 +273,9 @@ setInterval(async()=>{
 function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"Observer 不可用："+o.error:"Observer "+o.version+" · "+o.backend}
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
 // Only traverse currently expanded branches; cached collapsed directories are not online refresh targets.
-function visibleSourcePaths(){const out:string[]=[];function visit(dir:string,depth:number){if(depth>24)return;for(const e of treeEntries.get(dir)??[]){if(!e.directory)out.push(e.path);else if(expanded.has(e.path))visit(e.path,depth+1)}}if(root)visit(root,0);return out}
 const ojAccount=installOJAccount(call,config,()=>{void syncOJVisibility()});
 const ojImport=installOJImport<Nav>(call);
-const ojStatus=installOJStatus(call,()=>workbench.paths(),()=>source?.path??"",()=>workbench.draw(),message=>{status.textContent=message;if(preview.open&&message.startsWith("提交 #"))el("ojSubmitNotice").textContent=message},()=>!busy&&!config.open);
+const ojStatus=installOJStatus(call,()=>workbench.paths(),()=>source?.path??"",()=>workbench.draw(),message=>{status.textContent=message;if(preview.open&&!el("ojSubmitArea").hidden&&message.startsWith("提交 #"))el("ojSubmitNotice").textContent=message},()=>!busy&&!config.open);
 const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message},ojStatus.poll);
 const documentReader=installDocument(call);
 const workbench=installWorkbench(call,path=>{if(path!==source?.path)void navigate(async()=>select(await call<Nav>("Select",path)))},()=>{void syncOJWorkspace()},()=>source?.path??"",ojStatus.mark,()=>busy);
@@ -332,7 +331,7 @@ btn("save").onclick=async()=>{busy=true;updateControls();try{await save()}catch(
 btn("run").onclick=()=>void run(false);btn("all").onclick=()=>void run(true);
 btn("cancel").onclick=async()=>{btn("cancel").disabled=true;try{await call("Cancel")}catch(e){status.textContent=String(e)}};
 window.addEventListener("focus",async()=>{if(last&&!busy&&!dirty){const id=last.runId;try{if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id)markStale()}catch{markStale()}}});
-document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!editorDialog.open&&!manual.isOpen()&&!documentReader.isOpen()&&!(el<HTMLDialogElement>("ojDetailDialog").open)){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!editorDialog.open&&!busy){e.preventDefault();void manual.open()}});
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!editorDialog.open&&!manual.isOpen()&&!documentReader.isOpen()&&!(el<HTMLDialogElement>("ojDetailDialog").open)){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!editorDialog.open&&!documentReader.isOpen()&&!el<HTMLDialogElement>("ojDetailDialog").open&&!busy){e.preventDefault();void manual.open()}});
 window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
 async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;updateEditorLabel();status.textContent="";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning;void call("OJCheckAdapter").then(syncOJVisibility).catch(()=>{})}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
 void boot();

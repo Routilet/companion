@@ -161,6 +161,10 @@ jobs:
           done
           node scripts/package-release.mjs
           (cd release && sha256sum *.tgz > SHA256SUMS)
+          echo "Candidate tarball (bytes):" >> "$GITHUB_STEP_SUMMARY"
+          wc -c release/*.tgz >> "$GITHUB_STEP_SUMMARY"
+          if npm view @routilet/companion@0.1.0-beta.4 dist.unpackedSize --registry=https://registry.npmjs.org/ > /tmp/companion-old-size; then echo "beta.4 unpacked bytes: $(cat /tmp/companion-old-size)" >> "$GITHUB_STEP_SUMMARY"; fi
+          echo "Candidate unpacked bytes: $(tar -tvzf release/*.tgz | awk '$1 ~ /^-/ {sum+=$3} END{printf \"%.0f\",sum}')" >> "$GITHUB_STEP_SUMMARY"
           printf 'version=%s\n' "$(tr -d '\r\n' < VERSION)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
@@ -220,8 +224,8 @@ jobs:
           fi
   publish:
     needs: [package, installed, frontend, managed-adapter]
-    # Maintainer-authorized beta.4 only; later versions need explicit dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.4'))
+    # Maintainer-authorized beta.5 only; later versions need explicit dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.5'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -243,10 +247,10 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.4 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.5 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
-          if [[ "$version" == 0.1.0-beta.4 ]]; then
-            for spec in @routilet/routilet@0.1.7 @routilet/accoding-adapter@0.1.0-beta.1 @routilet/c-exam-kit@0.6.10; do
+          if [[ "$version" == 0.1.0-beta.5 ]]; then
+            for spec in @routilet/routilet@0.1.7 @routilet/accoding-adapter@0.1.0-beta.2 @routilet/c-exam-kit@0.6.10; do
               found=false
               for attempt in 1 2 3 4 5 6; do
                 if npm view "$spec" version --registry=https://registry.npmjs.org/ | grep -Fx "${spec##*@}"; then found=true; break; fi
@@ -255,10 +259,10 @@ jobs:
               test "$found" = true
             done
           fi
-          if [[ "$version" == 0.1.0-beta.4 ]]; then
+          if [[ "$version" == 0.1.0-beta.5 ]]; then
             code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in
-              200) echo "Approved beta.4 already published; no tag changes."; exit 0 ;;
+              200) echo "Approved beta.5 already published; no tag changes."; exit 0 ;;
               404) ;;
               *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
             esac

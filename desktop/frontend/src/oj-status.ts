@@ -11,10 +11,10 @@ export function installOJStatus(call:Call,paths:()=>string[],selected:()=>string
  function clear(){epoch++;pollEpoch++;cache={};if(detail.open)detail.close();el("ojDetailBody").replaceChildren();paint()}
  function mark(path:string){if(el("ojImport").hidden)return "";const v=cache[path];return v?(v.status.accepted?"AC":v.status.latest?.result??""):""}
  async function refresh(list:string[]){if(el("ojImport").hidden)return;pollEpoch++;try{const n=await call<number>("OJRefreshJudges",list);notify(`已刷新 ${n} 道关联题目`)}catch(e){notify(String(e))}finally{await refreshLocal()}}
- function poll(id:string,result:string){if(el("ojImport").hidden)return;const n=++pollEpoch;const until=Date.now()+60000;void refreshLocal();if(result!=="WT"&&result!=="JG"){void final();return}
-  async function final(){try{const v=await call<Judge>("OJPollReceipt",id);if(n!==pollEpoch)return;await refreshLocal();notify(`提交 #${id} · ${v.result}`)}catch{/* manual refresh remains available */}}
+ function poll(id:string,result:string,onResult?:(j:Judge)=>void){if(el("ojImport").hidden)return;const n=++pollEpoch;const until=Date.now()+60000;void refreshLocal();if(result!=="WT"&&result!=="JG"){void final();return}
+  async function final(){try{const v=await call<Judge>("OJPollReceipt",id);if(n!==pollEpoch)return;await refreshLocal();if(n!==pollEpoch)return;notify(`提交 #${id} · ${v.result}`);onResult?.(v)}catch{/* manual refresh remains available */}}
   async function step(){if(el("ojImport").hidden){return}if(n!==pollEpoch||Date.now()>=until){if(n===pollEpoch)notify("自动查询已停止，可手动刷新评测结果");return}if(!canPoll()){setTimeout(()=>void step(),2000);return}
-   try{const v=await call<Judge>("OJPollReceipt",id);if(n!==pollEpoch)return;await refreshLocal();notify(`提交 #${id} · ${v.result}`);if(v.result==="WT"||v.result==="JG")setTimeout(()=>void step(),2000)}catch(e){if(n===pollEpoch)notify("自动查询停止："+String(e))}}
+   try{const v=await call<Judge>("OJPollReceipt",id);if(n!==pollEpoch)return;await refreshLocal();notify(`提交 #${id} · ${v.result}`);if(v.result==="WT"||v.result==="JG")setTimeout(()=>void step(),2000);else if(n===pollEpoch)onResult?.(v)}catch(e){if(n===pollEpoch)notify("自动查询停止："+String(e))}}
   setTimeout(()=>void step(),2000)
  }
  return {refreshLocal,clear,mark,refresh,poll};
