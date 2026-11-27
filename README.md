@@ -2,15 +2,17 @@
 
 ![Companion](desktop/frontend/icons/companion.svg)
 
-Routilet 的文件优先本地 C/C++ 编程辅助工具。普通源文件和文件夹无需初始化；外部编辑器写代码，Companion 管理测试样例、本地编译运行、版本化 Exam Kit 资源、函数手册及独立提交源码。可选 Observer 独立运行观察。无 OJ 插件，无运行时 AI 或 Node.js 依赖。
+Routilet 的文件优先 C/C++ 编程辅助工具。普通源文件和文件夹无需初始化；外部编辑器写代码，Companion 管理测试样例、本地编译运行、版本化 Exam Kit 资源、函数手册及独立提交源码。可选 Observer 独立运行观察，可选 Accoding Adapter 提供账号、题目导入、确认提交与评测状态。无运行时 AI 或 Node.js 依赖。
 
-## 状态
+## 测试版
 
-从 [Accoding Companion 的阶段 05 分支](https://github.com/Routilet/accoding-companion/tree/3161fc14d9c955e9e1ef977dfe5cbd72aa774aa4) 迁移的新工程；尚未正式发行。目标 Windows 11 x64、Apple Silicon macOS 12+；系统 WebView。旧版仍在原仓库，不迁移旧课程数据，不更改旧 npm 包。
+当前候选版本 0.1.0-beta.3，面向 Windows 11 x64 和 Apple Silicon macOS 12+（系统 WebView）。通过 Routilet 0.1.6 或兼容新版的测试通道安装 `@routilet/companion`；在线功能另行安装并启用 `@routilet/accoding-adapter` 0.1.0-beta.1。Exam Kit 0.6.10 为固定依赖，Observer 独立可选。没有 Adapter 或网络仍可使用本地功能，不自动登录或下载。在线提交必须明确确认，结果不确定时不要直接重发。
 
-- 新包：`@routilet/companion`（占位版本不是可安装应用）
-- 正式分发候选采用固定 Exam Kit 依赖和 Routilet app-call/1。详见 [发行与集成](docs/distribution.md)。尚未发布。
-- [设计与路线图](docs/companion-next-roadmap.md)、[存储设计](docs/companion-next-storage.md)、[核心接口](docs/companion-next-api.md)；历史实现审计仅作参考。
+测试版真实 Accoding 平台与实际 WebView 尚待用户验收，不宣称正式稳定版。不迁移旧课程数据，不更改旧 npm 包。请遵守课程考试规定；运行可信源码，本地运行不是沙箱。
+
+- [发行与集成](docs/distribution.md) · [beta.3 发行说明](docs/release-beta.3.md)
+- [正式 Adapter 接入](docs/managed-adapter.md) · [设计与路线图](docs/companion-next-roadmap.md)
+- [存储设计](docs/companion-next-storage.md) · [核心接口](docs/companion-next-api.md)
 - [迁移来源与验收](docs/migration.md) · [开发与测试](docs/development.md)
 
-未经维护者审批不发布。遵守课程考试规定；运行可信源码，不是沙箱。
+未经维护者审批不发布其他版本。
