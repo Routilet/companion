@@ -5,6 +5,8 @@ on:
     paths: ['VERSION', '.github/workflows/release.yml', 'desktop/**', 'internal/**', 'cmd/**', 'scripts/**', 'package.json', 'go.mod', 'go.sum']
   pull_request:
     branches: [main, feat/native-companion-migration]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['VERSION', '.github/workflows/**', 'desktop/**', 'internal/**', 'cmd/**', 'scripts/**', 'tests/**', 'package.json', 'go.mod', 'go.sum']
   workflow_dispatch:
     inputs:
       publish:
@@ -15,11 +17,13 @@ permissions:
   contents: read
 concurrency:
   group: companion-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   managed-adapter:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     uses: ./.github/workflows/adapter-host.yml
   frontend:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -40,6 +44,7 @@ jobs:
           node out/ui-test/node_modules/playwright/cli.js install --with-deps chromium
           node --test tests/browser.test.mjs
   build:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -111,10 +116,12 @@ jobs:
           mkdir -p "$stage/bin"
           if [[ "$TARGET" == win32-x64 ]]; then
             export CGO_ENABLED=0
+            go test -mod=readonly -tags production -v ./desktop
             go build -mod=readonly -tags production -trimpath -ldflags "-s -w -H windowsgui -X main.buildVersion=$version" -o "$stage/bin/companion.exe" ./desktop
             go build -mod=readonly -trimpath -o "$stage/bin/companion-cli.exe" ./cmd/companion
           else
             export CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=12.0
+            go test -mod=readonly -tags production -v ./desktop
             app="$stage/bin/Companion.app"
             mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
             cp desktop/Info.plist "$app/Contents/Info.plist"

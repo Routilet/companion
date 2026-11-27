@@ -17,6 +17,9 @@ type fakeImportAccount struct {
 }
 func (f *fakeImportAccount) Status() ojadapter.AccountView {return ojadapter.AccountView{AccountState:ojadapter.AccountState{State:"signed_in",ID:f.id},Available:true}}
 func (f *fakeImportAccount) Import(context.Context,string)(ojadapter.ImportResult,error){return f.result,nil}
+// Explicitly implement the optional batch capability. The embedded nil Accounts
+// is only a fixture for unused methods; it must not receive promoted calls.
+func (f *fakeImportAccount) ContestJudges(context.Context, []ojadapter.Target)([]ojadapter.JudgeStatus,error){return nil,ojadapter.ErrBatchUnsupported}
 func importProblem(id,label string)ojadapter.Problem {
  target:=ojadapter.Target{Kind:"contest",ContestID:"42",ProblemID:id}
  return ojadapter.Problem{Target:target,Title:"题目 "+label,Label:label,SourceURL:target.URL(),Samples:[]ojadapter.Sample{{Input:"1\n",Expected:"2\n"}}}

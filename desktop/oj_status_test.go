@@ -17,3 +17,16 @@ func TestOJJudgeDesktop(t *testing.T){
  a.id="8";if len(d.OJCachedJudges([]string{path}))!=0{t.Fatal("other account cache")};if _,e=d.OJPollReceipt("123");e==nil{t.Fatal("polled other account")}
  a.id="7";if e=d.OJUnbind(path);e!=nil{t.Fatal(e)};if len(d.OJCachedJudges([]string{path}))!=0{t.Fatal("unbound cache")}
 }
+
+// A contest batch uses one request even with multiple local bound sources.
+type fakeBatchJudgeAccount struct{*fakeJudgeAccount; batches int}
+func(f *fakeBatchJudgeAccount) ContestJudges(_ context.Context,targets []ojadapter.Target)([]ojadapter.JudgeStatus,error){
+ f.batches++;out:=make([]ojadapter.JudgeStatus,0,len(targets));for _,t:=range targets{out=append(out,ojadapter.JudgeStatus{AccountID:f.id,Target:t,Accepted:true,Latest:&ojadapter.JudgeResult{ID:"124",Result:"AC",Language:"C++17"}})};return out,nil
+}
+func TestOJContestBatchDesktop(t *testing.T){
+ d,a:=importDesktop(t,importProblem("5","A"),importProblem("6","B"));f:=&fakeBatchJudgeAccount{fakeJudgeAccount:&fakeJudgeAccount{fakeImportAccount:a}};d.accounts=f
+ plan,e:=d.OJPreviewImport("fixture",".cpp",false);if e!=nil{t.Fatal(e)};if _,e=d.OJApplyImport(plan.Token);e!=nil{t.Fatal(e)}
+ view,e:=d.OJWorkspace();if e!=nil||len(view.Items)!=2{t.Fatal(view,e)}
+ paths:=[]string{view.Items[0].Path,view.Items[1].Path};if n,e:=d.OJRefreshJudges(paths);e!=nil||n!=2||f.batches!=1||f.calls!=0{t.Fatal(n,e,f.batches,f.calls)}
+ if v:=d.OJCachedJudges(paths);len(v)!=2{t.Fatal(v)}
+}

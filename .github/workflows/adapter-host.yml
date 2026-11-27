@@ -3,7 +3,7 @@ on:
   push:
     branches: ['feat/adapter-*']
   pull_request:
-    branches: [main, 'feat/adapter-*']
+    branches: ['feat/adapter-*']
     paths:
       - 'internal/ojadapter/**'
       - '.github/workflows/adapter-host.yml'

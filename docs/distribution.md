@@ -39,3 +39,6 @@ CI 验证真实发行资产和安装清单；实际管理器启动、中文路�
 
 ## beta.6 发行授权
 维护者授权 Companion 0.1.0-beta.6 测试发行，配套 Routilet 0.1.8 启动锁修复；Adapter 0.1.0-beta.2、Exam Kit 0.6.10、Observer 无需新版本。资源按需读取并在单次操作内固定；旧快照保持。主线发布门禁包括实际浏览器、双平台原生构建与安装、固定新版管理器和 Adapter 联调及 npm 依赖可见性。仅 next，不覆盖旧版本。详见 [beta.6](release-beta.6.md)。
+
+## CI 使用原则
+普通开发先在本地进行针对性测试，汇总修改后再提交；不将完整双平台构建作为逐步调试工具。main 的 PR 使用统一 native release 候选验收（包含桌面 Go 测试、核心测试、真实 Adapter/Manager、浏览器、签名构建与安装），不再同时自动触发重复的 native CI 与 adapter-host；后两者保留专项手动入口和原有专项分支。草稿 PR 跳过重型候选任务，ready for review 或后续同步再触发；过时 PR 验收取消。main 发行仍须经过完整门禁，不能因节省资源而跳过测试。
