@@ -1,9 +1,9 @@
 name: Companion native CI (no publishing)
 on:
   push:
-    branches: [feat/native-companion-migration]
+    branches: [feat/native-companion-migration, 'feat/adapter-*']
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/adapter-*']
   workflow_dispatch:
 permissions:
   contents: read
@@ -67,6 +67,8 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
+          go test -mod=readonly -tags production -v ./desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go build -mod=readonly -tags production -trimpath -ldflags "-s -w -H windowsgui" -o out/companion.exe ./desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go build -mod=readonly -trimpath -o out/companion-cli.exe ./cmd/companion
@@ -81,6 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(uname -m)" = arm64
+          go test -mod=readonly -tags production -v ./desktop
           app="out/Companion.app"
           mkdir -p "$app/Contents/MacOS"
           go build -mod=readonly -tags production -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/companion" ./desktop

@@ -1,7 +1,9 @@
 name: Adapter host CI (no publishing)
 on:
+  push:
+    branches: ['feat/adapter-*']
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/adapter-*']
     paths:
       - 'internal/ojadapter/**'
       - '.github/workflows/adapter-host.yml'

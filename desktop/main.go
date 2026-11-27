@@ -20,7 +20,7 @@ import (
 var assets embed.FS
 
 type Desktop struct{
- accounts *ojadapter.Accounts
+ accounts ojAccountService
  ojPending *ojPending
  ojSequence uint64
  native *application.App

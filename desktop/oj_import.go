@@ -9,6 +9,17 @@ import (
 	"path/filepath"
 )
 
+// Account interface lets the desktop flow be tested without credentials or OJ access.
+type ojAccountService interface {
+ Status() ojadapter.AccountView
+ Import(context.Context,string)(ojadapter.ImportResult,error)
+ Login(context.Context,string,string,bool)(ojadapter.AccountView,error)
+ Restore(context.Context)(ojadapter.AccountView,error)
+ Refresh(context.Context)(ojadapter.AccountView,error)
+ Logout()(ojadapter.AccountView,error)
+ Close()
+}
+
 type ojPending struct {
 	root, token string
 	plan        ojadapter.Plan
