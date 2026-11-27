@@ -1,2 +1,2 @@
-# beta.6 browser coverage
-Existing browser tests are retained; editor selection assertion observes tooltip rather than previous redundant visible editor name. New login and resource selection tests will be added to the executable suite.
+# beta.6 regression coverage
+Executable browser tests cover settings-only local preferences, lazy account restoration, exact source copy, and explicit resource selection.

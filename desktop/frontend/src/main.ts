@@ -276,7 +276,7 @@ setInterval(async()=>{
  if(!observing||observerPolling)return;observerPolling=true;
  try{const s=await call<string>("ObservationState");if(s!=="running"){observing=false;el("observerState").textContent=s==="closed"?"观察窗口已关闭，会话已清理。":s;updateControls()}}catch(e){el("observerState").textContent=String(e)}finally{observerPolling=false}
 },1000);
-function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"Observer 不可用："+o.error:"Observer "+o.version+" · "+o.backend}
+function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"不可用："+o.error:o.version||"不可用"}
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
 // Only traverse currently expanded branches; cached collapsed directories are not online refresh targets.
 const ojAccount=installOJAccount(call,el<HTMLDialogElement>("ojAccountDialog"),()=>{void syncOJVisibility()});const kitSwitch=installKitSwitch(call);
@@ -297,7 +297,7 @@ async function launchEditor(path:string){try{await call("OpenEditor",path);edito
 async function editorMenu(openAfter:boolean){
  if(busy||(openAfter&&!source)||editorDialog.open)return;
  const epoch=++editorEpoch;editorDialog.showModal();const choices=el("editorChoices"),hint=el("editorHint");choices.replaceChildren();hint.textContent="正在检测本机代码编辑器…";
- async function pick(path:string){editorDialog.close();if(openAfter)await launchEditor(path);else{editorPath=path;updateEditorLabel();await storeConfig()}}
+ async function pick(path:string){editorDialog.close();if(openAfter)await launchEditor(path);else{await preferenceFlight;try{await call("StoreConfig",compilerByLanguage.c.trim(),compilerByLanguage.cpp.trim(),path.trim());editorPath=path;updateEditorLabel();el("configNotice").hidden=true}catch(e){el("configNotice").textContent="编辑器设置保存失败："+String(e);el("configNotice").hidden=false}}}
  btn("editorClose").onclick=()=>editorDialog.close();
  btn("editorSystem").onclick=()=>void pick("@system");
  btn("editorCustom").onclick=async()=>{try{const p=await call<string>("ChooseEditor");if(p&&editorDialog.open&&epoch===editorEpoch)await pick(p)}catch(e){hint.textContent=String(e)}};
@@ -311,7 +311,7 @@ btn("openEditor").onclick=async()=>{if(!editorPath){await editorMenu(true);retur
 btn("settingsEditor").onclick=()=>void editorMenu(false);
 btn("reveal").onclick=async()=>{try{if(menuEntry?.directory)await call("RevealFolder",menuEntry.path);else await call("Reveal")}catch(e){status.textContent=String(e)}};
 async function openSubmission(online:boolean){if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；请核对后再复制或提交。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";el("previewTitle").textContent="复制提交源码";preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest,online,source&&language(source)==="cpp"?"C++":"C")}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
-btn("previewSource").onclick=()=>void openSubmission(false);btn("copy").onclick=async()=>{if(busy||!source)return;busy=true;updateControls();try{const p=await call<Submission>("Prepare",compiler.value.trim());await call("CopyPrepared",compiler.value.trim(),p.digest);status.textContent=p.verified&&!dirty?"已复制":"已复制；当前源码未完整验证"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};btn("ojSubmitBtn").onclick=async()=>{if(busy||!await ojAccount.requireLogin())return;void openSubmission(true)};
+btn("previewSource").onclick=()=>void openSubmission(false);btn("copy").onclick=async()=>{if(busy||!source)return;busy=true;updateControls();try{const p=await call<Submission>("Prepare",compiler.value.trim());await call("CopyPrepared",compiler.value.trim(),p.digest);status.textContent=p.verified&&!dirty?"已复制":"已复制；当前源码未完整验证"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};btn("ojSubmitBtn").onclick=async()=>{if(busy||!source)return;const path=source.path;if(!await ojAccount.requireLogin()||busy||source?.path!==path||!workbench.active())return;void openSubmission(true)};
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};
@@ -324,7 +324,7 @@ async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true
 btn("ojRefreshTree").onclick=()=>{void refreshOJ(workbench.groupPaths())};
 btn("ojRefreshCurrent").onclick=()=>{if(source)void refreshOJ([source.path])};
 
-async function savePreferences(){const c=el<HTMLInputElement>("cc").value.trim(),cpp=el<HTMLInputElement>("cxx").value.trim();if(c===compilerByLanguage.c&&cpp===compilerByLanguage.cpp)return;try{await call("StoreConfig",c,cpp,editorPath.trim());compilerByLanguage.c=c;compilerByLanguage.cpp=cpp;if(source)compiler.value=compilerByLanguage[language(source)];markStale();el("configNotice").hidden=true}catch(e){el("configNotice").textContent="保存失败："+String(e);el("configNotice").hidden=false}}el<HTMLInputElement>("cc").onchange=()=>void savePreferences();el<HTMLInputElement>("cxx").onchange=()=>void savePreferences();
+let preferenceFlight:Promise<void>=Promise.resolve();function savePreferences(){const c=el<HTMLInputElement>("cc").value.trim(),cpp=el<HTMLInputElement>("cxx").value.trim();preferenceFlight=preferenceFlight.then(async()=>{if(c===compilerByLanguage.c&&cpp===compilerByLanguage.cpp)return;try{await call("StoreConfig",c,cpp,editorPath.trim());compilerByLanguage.c=c;compilerByLanguage.cpp=cpp;if(source)compiler.value=compilerByLanguage[language(source)];markStale();el("configNotice").hidden=true}catch(e){el("configNotice").textContent="保存失败："+String(e);el("configNotice").hidden=false}});return preferenceFlight}el<HTMLInputElement>("cc").onchange=()=>void savePreferences();el<HTMLInputElement>("cxx").onchange=()=>void savePreferences();
 compiler.onchange=()=>void storeConfig();
 btn("reload").onclick=()=>void navigate(async()=>{markStale();if(source&&seenMissing.has(source.path))await call("Invalidate",source.path);await reload();if(source&&seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，是否继续使用旧样例？")){loaded=false;return}seenMissing.delete(source.path)}await showOrphans()});
 btn("add").onclick=()=>{cases.push({input:"",expected:null});selected=cases.length-1;changes();renderCases()};

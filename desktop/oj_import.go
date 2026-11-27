@@ -112,7 +112,7 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 		return out, e
 	}
 	var first localrun.Source
- packageRoot:="";cleanup:=func(){};for _,row:=range p.Rows{if row.Action=="create"&&strings.EqualFold(filepath.Ext(row.Name),".c"){var err error;packageRoot,cleanup,err=d.installedKit();if err!=nil{packageRoot=""};break}};defer cleanup()
+ packageRoot:="";cleanup:=func(){};for _,row:=range p.Rows{if row.Action=="create"&&strings.EqualFold(filepath.Ext(row.Name),".c"){var err error;packageRoot,cleanup,err=d.installedKit();if err!=nil{packageRoot="";d.kitError=err.Error()}else{d.kitError=""};break}};defer cleanup()
 	for _, row := range p.Rows {
 		if row.Action == "skip" {
 			out.Skipped = append(out.Skipped, row.Name)

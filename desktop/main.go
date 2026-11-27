@@ -58,6 +58,7 @@ func(d *Desktop) installedKit()(string,func(),error){
  if d.kitPackage!=""&&d.managerPath==""{return d.kitPackage,func(){},nil}
  return localrun.ResolveSessionKit(d.managerPath)
 }
+func(d *Desktop) KitCreationWarning()string{d.mu.Lock();defer d.mu.Unlock();return d.kitError}
 func(d *Desktop) KitStatus()localrun.KitStatus{
  d.mu.Lock();defer d.mu.Unlock()
  p,cleanup,e:=d.installedKit();defer cleanup()
@@ -241,7 +242,7 @@ func(d *Desktop) Create(dir,name string)(Navigation,error){
  }
  if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")}
  if b,e:=ojadapter.LoadBinding(filepath.Join(target,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
- packageRoot:="";cleanup:=func(){};if strings.EqualFold(filepath.Ext(name),".c"){var kitErr error;packageRoot,cleanup,kitErr=d.installedKit();if kitErr!=nil{packageRoot=""}};defer cleanup()
+ packageRoot:="";cleanup:=func(){};if strings.EqualFold(filepath.Ext(name),".c"){var kitErr error;packageRoot,cleanup,kitErr=d.installedKit();if kitErr!=nil{packageRoot="";d.kitError=kitErr.Error()}else{d.kitError=""}};defer cleanup()
  s,e:=localrun.CreateSourceWithKit(root,target,name,packageRoot);if e!=nil{return Navigation{},e}
  d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil
 }

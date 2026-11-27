@@ -28,18 +28,19 @@ func planKitFile(root,path string,k Kit)(KitChange,error){
 }
 func PlanKitSwitch(root string,paths []string,k Kit)(KitPlan,error){
  p:=KitPlan{Version:k.Version,Fingerprint:k.Fingerprint,Rows:[]KitChange{}};if len(paths)==0||len(paths)>512{return p,errors.New("请选择 1 至 512 个 C 文件")}
- seen:=map[string]bool{};for _,path:=range paths{if seen[path]{continue};seen[path]=true;r,e:=planKitFile(root,path,k);if e!=nil{r.Kind="skip";r.Reason=e.Error()};p.Rows=append(p.Rows,r)};return p,nil
+ seen:=map[string]bool{};total:=0;for _,path:=range paths{if seen[path]{continue};seen[path]=true;r,e:=planKitFile(root,path,k);if e!=nil{r.Kind="skip";r.Reason=e.Error()};total+=len(r.next);if total>16<<20{return p,errors.New("源码总量过大，请缩小切换范围")};p.Rows=append(p.Rows,r)};return p,nil
 }
 func ApplyKitChange(root string,r KitChange,k Kit)error{
  if r.Kind!="template"&&r.Kind!="modified"&&r.Kind!="attach"{return errors.New("该文件不可切换")}
  fresh,e:=planKitFile(root,r.Path,k);if e!=nil{return e};if fresh.Digest!=r.Digest||fresh.Kind!=r.Kind||!bytes.Equal(fresh.next,r.next){return errors.New("源码已变化，请重新预览")}
  if _,e=SaveKitSnapshot(root,k);e!=nil{return e}
+ s,e:=Open(r.Path);if e!=nil{return e};if _,e=PrepareSource(s,r.next);e!=nil{return errors.New("新资源不兼容当前源码："+e.Error())}
  // Recheck immediately before replacing. External editors should save and
  // close affected buffers before applying; their unsaved buffers are invisible.
  st,e:=os.Lstat(r.Path);if e!=nil||!st.Mode().IsRegular(){return errors.New("源码已变化")}
  tmp,e:=os.CreateTemp(filepath.Dir(r.Path),".kit-switch-*");if e!=nil{return e};defer os.Remove(tmp.Name())
  if e=tmp.Chmod(st.Mode().Perm());e==nil{_,e=tmp.Write(r.next)};if e==nil{e=tmp.Sync()};ce:=tmp.Close();if e==nil{e=ce};if e!=nil{return e}
- s,e:=Open(r.Path);if e!=nil{return e};raw,e:=readSource(s);if e!=nil||digest(raw)!=r.Digest{return errors.New("源码已变化，请重新预览")}
+ s,e=Open(r.Path);if e!=nil{return e};raw,e:=readSource(s);if e!=nil||digest(raw)!=r.Digest{return errors.New("源码已变化，请重新预览")}
  now,e:=os.Lstat(r.Path);if e!=nil||!os.SameFile(st,now){return errors.New("源码已被替换")}
  return replaceCases(tmp.Name(),r.Path)
 }
