@@ -9,6 +9,20 @@ function modal(dialog:HTMLDialogElement):Promise<boolean>{return new Promise(res
 export function installOJImport<T>(call:Call){
  const dialog=el<HTMLDialogElement>("ojImportDialog"),preview=el<HTMLDialogElement>("ojImportPreview");
  let epoch=0,importEpoch=0;
+ // The backend does not expose per-problem progress. Use an indeterminate
+ // indicator rather than guessing a percentage or offering a false cancel.
+ const progressDialog=document.createElement("dialog");
+ progressDialog.id="ojImportProgress";progressDialog.setAttribute("aria-labelledby","ojImportProgressText");
+ progressDialog.style.width="min(360px,90vw)";
+ const progressText=document.createElement("h2");progressText.id="ojImportProgressText";progressText.setAttribute("role","status");
+ const progressBar=document.createElement("progress");progressBar.setAttribute("aria-label","导入进度（不确定）");
+ progressDialog.append(progressText,progressBar);document.body.append(progressDialog);
+ progressDialog.addEventListener("cancel",event=>event.preventDefault());
+ async function withProgress<R>(message:string,action:()=>Promise<R>):Promise<R>{
+  progressText.textContent=message;progressDialog.showModal();
+  try{return await action()}finally{progressDialog.close()}
+ }
+ const recentProgress=document.createElement("progress");recentProgress.id="ojRecentProgress";recentProgress.setAttribute("aria-label","正在读取近期比赛");recentProgress.hidden=true;el("ojRecentNotice").after(recentProgress);
  function clearBinding(){el("ojBinding").hidden=true;el("ojSourceActions").hidden=true;el("ojBindingError").hidden=true;el("path").hidden=false;const file=el("path").title.split(/[\\/]/).pop();if(file&&/\.(c|cpp|cc|cxx)$/i.test(file)){el("title").textContent=file;el("title").title=el("path").title}}
  async function refresh(path:string){
   const n=++epoch,binding=el("ojBinding");clearBinding();
@@ -23,7 +37,7 @@ export function installOJImport<T>(call:Call){
   const url=el<HTMLInputElement>("ojImportURL"),lang=el<HTMLSelectElement>("ojImportLang"),attach=el<HTMLInputElement>("ojImportAttach"),recent=el("ojRecent"),notice=el("ojRecentNotice"),confirm=btn("ojImportConfirm");
   let destination=root,manual=false,contestId="",loading=true;url.value="";attach.checked=false;attach.disabled=!path;lang.value=".c";recent.replaceChildren();el("ojDestination").textContent=destination;notice.textContent="正在读取近期比赛…";
   function update(){
-   el("ojRecentPanel").hidden=manual;el("ojLinkPanel").hidden=!manual;btn("ojImportMode").textContent=manual?"返回近期比赛":"通过链接导入";
+   recentProgress.hidden=!loading||manual;el("ojRecentPanel").hidden=manual;el("ojLinkPanel").hidden=!manual;btn("ojImportMode").textContent=manual?"返回近期比赛":"通过链接导入";
    url.required=manual;confirm.disabled=manual?!url.value.trim()||!url.validity.valid:loading||!contestId;
    btn("ojChooseDestination").disabled=manual&&attach.checked;
   }
@@ -47,11 +61,11 @@ export function installOJImport<T>(call:Call){
   if(!await confirmed)return null;
   const link=manual?url.value.trim():"https://accoding.buaa.edu.cn/contest-ng/index.html#/"+contestId;
   if(!manual&&!contestId)return null;
-  let p=await call<Preview>("OJPreviewImportAt",link,lang.value,manual&&attach.checked,destination);const folder=el<HTMLInputElement>("ojFolderName"),field=el("ojFolderField"),error=el("ojFolderError");let replanBusy=false;field.hidden=!p.plan.canRename;folder.value=p.plan.folderName??"";folder.disabled=false;error.textContent="";el("ojPreviewTitle").textContent=p.plan.title;el("ojPreviewDir").textContent=p.plan.directory;
+  let p=await withProgress("正在获取题目与样例，生成导入预览…",()=>call<Preview>("OJPreviewImportAt",link,lang.value,manual&&attach.checked,destination));const folder=el<HTMLInputElement>("ojFolderName"),field=el("ojFolderField"),error=el("ojFolderError");let replanBusy=false;field.hidden=!p.plan.canRename;folder.value=p.plan.folderName??"";folder.disabled=false;error.textContent="";el("ojPreviewTitle").textContent=p.plan.title;el("ojPreviewDir").textContent=p.plan.directory;
   function drawPlan(){const list=el("ojPreviewRows");list.replaceChildren();let count=0;for(const row of p.plan.rows){const item=document.createElement("li");const action=row.action==="create"?"新建":row.action==="attach"?"关联":row.action==="repair"?"补充":"跳过";if(row.action!=="skip")count++;item.textContent=`${action} ${row.name} · ${row.title} · ${row.samples} 组样例${row.document?" · "+row.document:""}${row.warnings.length?" · "+row.warnings.join("；"):""}`;list.append(item)}btn("ojPreviewConfirm").disabled=count===0||replanBusy||(!field.hidden&&folder.value!==p.plan.folderName)}drawPlan();
   folder.oninput=()=>{error.textContent="";drawPlan()};
   folder.onchange=async()=>{if(replanBusy||folder.value===p.plan.folderName)return;replanBusy=true;folder.disabled=true;btn("ojPreviewConfirm").disabled=true;try{const next=await call<Preview>("OJReplanImport",p.token,folder.value);if(preview.open&&runEpoch===importEpoch){p=next;folder.value=p.plan.folderName??"";field.hidden=!p.plan.canRename;error.textContent=""}}catch(e){if(preview.open&&runEpoch===importEpoch)error.textContent=String(e)}finally{replanBusy=false;if(runEpoch===importEpoch){folder.disabled=false;drawPlan()}}};
-  if(!await modal(preview)||replanBusy||(!field.hidden&&folder.value!==p.plan.folderName))return null;return await call<Apply<T>>("OJApplyImport",p.token)
+  if(!await modal(preview)||replanBusy||(!field.hidden&&folder.value!==p.plan.folderName))return null;return await withProgress("正在导入题目，请稍候…",()=>call<Apply<T>>("OJApplyImport",p.token))
  }
  return {refresh,run,clearBinding};
 }

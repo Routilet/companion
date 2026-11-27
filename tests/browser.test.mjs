@@ -41,8 +41,8 @@ async function setup(t){
    case 'OJWorkspace':return {items:state.ojItems??(state.ojBinding?[{path:'/work/A.c',directory:'/work',group:'work',binding:state.ojBinding}]:[]),limited:false};
    case 'ReadLocalDocument':return state.document??null;
    case 'OJRecentContests':return state.recentContests??[];
-   case 'OJPreviewImportAt':return {token:'import-preview',plan:{title:'期末复习赛',directory:'/work',rows:[{name:'A.c',title:'题目',action:'create',samples:1,warnings:[]}]}};
-   case 'OJApplyImport':return {nav:nav(),completed:['A.c'],skipped:[],failed:[]};
+   case 'OJPreviewImportAt':if(state.holdPreview)await new Promise((resolve,reject)=>{state.finishPreview=resolve;state.failPreview=()=>reject(Error('获取比赛失败'))});return {token:'import-preview',plan:{title:'期末复习赛',directory:'/work',rows:[{name:'A.c',title:'题目',action:'create',samples:1,warnings:[]}]}};
+   case 'OJApplyImport':if(state.holdApply)await new Promise(resolve=>{state.finishApply=resolve});return {nav:nav(),completed:['A.c'],skipped:[],failed:[]};
    case 'OJPollReceipt':return {id:args[0],result:'AC',language:'C'};
    case 'OJRefreshJudges':return 1;
    case 'OJUnbind':state.ojBinding=null;state.ojJudges={};return;
@@ -297,4 +297,26 @@ test('51 contest problems fit a compact matrix, no repeated unsubmitted label, s
  assert.equal(await p.locator('#ojTree').getByText('未提交',{exact:true}).count(),0);assert.equal(await p.locator('#path').isVisible(),false);
  const layout=await p.evaluate(()=>{const tree=document.querySelector('#ojTree'),first=tree.firstElementChild,last=tree.lastElementChild;return {height:tree.clientHeight,content:tree.scrollHeight,first:first.getBoundingClientRect().top,last:last.getBoundingClientRect().bottom,top:tree.getBoundingClientRect().top,bottom:tree.getBoundingClientRect().bottom}});
  assert.ok(layout.content<=layout.height+2,JSON.stringify(layout));assert.ok(layout.first>=layout.top&&layout.last<=layout.bottom,JSON.stringify(layout));
+});
+
+test('import preview and apply show indeterminate progress, block dismissal, and recover after failure',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.recentContests=[{id:'1359',title:'期末复习赛',start:'2026-11-27',status:'进行中'}];fixture.holdPreview=true;fixture.holdApply=true});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();
+ async function startPreview(){await p.locator('#ojImport').click();await p.locator('.recent-contest').click();await p.locator('#ojImportConfirm').click();await p.locator('#ojImportProgress').waitFor()}
+ await startPreview();
+ assert.match(await p.locator('#ojImportProgressText').textContent(),/生成导入预览/);
+ assert.equal(await p.locator('#ojImportProgress progress').getAttribute('value'),null);
+ await p.keyboard.press('Escape');assert.equal(await p.locator('#ojImportProgress').isVisible(),true);
+ await p.evaluate(()=>fixture.failPreview());
+ await p.locator('#ojImportProgress').waitFor({state:'hidden'});
+ await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('获取比赛失败')&&!document.querySelector('#ojImport').disabled);
+ await startPreview();await p.evaluate(()=>fixture.finishPreview());await p.locator('#ojImportPreview').waitFor();
+ assert.equal(await p.locator('#ojImportProgress').isVisible(),false);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJApplyImport').length),0);
+ await p.locator('#ojPreviewConfirm').click();await p.locator('#ojImportProgress').waitFor();
+ assert.match(await p.locator('#ojImportProgressText').textContent(),/正在导入题目/);
+ await p.evaluate(()=>fixture.finishApply());await p.locator('#ojImportProgress').waitFor({state:'hidden'});
+ await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('导入完成 1 题')&&!document.querySelector('#ojImport').disabled);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJApplyImport').length),1);
 });
