@@ -12,8 +12,9 @@ const dir=path.resolve('out/install');
 await mkdir(dir,{recursive:true});
 await writeFile(path.join(dir,'package.json'),JSON.stringify({
  name:'companion-install-check',private:true,
- dependencies:{'@routilet/companion':'file:'+archive}
+ dependencies:{'@routilet/companion':'file:'+archive,'@routilet/c-exam-kit':'0.6.10'}
 })+'\n');
+if(process.platform==='win32')await writeFile(path.join(dir,'pnpm-workspace.yaml'),'nodeLinker: hoisted\npackageImportMethod: copy\nverifyStoreIntegrity: true\nenableGlobalVirtualStore: false\n');
 const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!(/^(npm_config_|pnpm_|node_options$|node_path$)/i).test(k)));
 for(const n of ['user.npmrc','global.npmrc'])await writeFile(path.join(dir,n),'');
 Object.assign(env,{

@@ -25,3 +25,7 @@ CI 验证真实发行资产和安装清单；实际管理器启动、中文路�
 ## beta.3 联合验收与测试发行
 
 维护者已授权 0.1.0-beta.3 测试发行。沿用 Exam Kit 0.6.10，Observer 与 Accoding Adapter 独立可选；正式 Adapter 调用对齐 Routilet 0.1.6（固定源码 SHA 0405ed8）。发行工作流必须通过实际前端、双平台构建/候选安装及最终管理器/Adapter 原生联合测试，检查已发布的 Routilet 0.1.6 和 Adapter 0.1.0-beta.1 npm 版本，才发布 beta.3 到 next。已存在版本不重新发布；不修改 latest。不再自动发布旧 beta.2。真实平台与真机验收待进行。详见 [发行说明](release-beta.3.md)。
+
+## beta.4 独立 Exam Kit（待审核）
+
+移除固定 npm 依赖。启动时通过 Routilet 0.1.7 的 `--resource-probe` / `--resource-export c-exam-kit` 获取独立资源副本，校验协议、固定文件清单、大小及既有完整业务 schema，存放会话私有临时目录，正常退出清理。已打开会话不随更新或禁用改变；重新打开后使用当前激活版本。无资源时仍允许普通源码、已有快照功能，不自动下载、不隐式回退。仅无 manager 时允许显式 COMPANION_EXAM_KIT_PACKAGE 开发路径。旧依赖定位函数保留作历史兼容测试，不参与新启动路径。候选安装 CI 用独立测试资源验证，无生产依赖；还需真实 Routilet 联调。beta.4 不自动发布，待维护者审核。
