@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Routilet/accoding-adapter
-          ref: e24954d46e2b8d54e41cfb1d8c78dc24e006bbe5
+          ref: 3d193f06ed92e5c8976aa9a2812dab989fdfbd40
           path: adapter-fixture
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
           $manager = Join-Path $env:RUNNER_TEMP 'routilet.exe'
           Push-Location adapter-fixture
           try {
-            go build -mod=readonly -ldflags "-X github.com/Routilet/accoding-adapter/internal/wire.Version=0.1.0-beta.2" -o $adapter ./cmd/accoding-adapter
+            go build -mod=readonly -ldflags "-X github.com/Routilet/accoding-adapter/internal/wire.Version=0.1.0" -o $adapter ./cmd/accoding-adapter
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } finally { Pop-Location }
           Push-Location manager-fixture/desktop
@@ -81,7 +81,7 @@ jobs:
           test "$(go env GOARCH)" = arm64
           adapter="$RUNNER_TEMP/accoding-adapter"
           manager="$RUNNER_TEMP/routilet"
-          (cd adapter-fixture && CGO_ENABLED=0 go build -mod=readonly -ldflags "-X github.com/Routilet/accoding-adapter/internal/wire.Version=0.1.0-beta.2" -o "$adapter" ./cmd/accoding-adapter)
+          (cd adapter-fixture && CGO_ENABLED=0 go build -mod=readonly -ldflags "-X github.com/Routilet/accoding-adapter/internal/wire.Version=0.1.0" -o "$adapter" ./cmd/accoding-adapter)
           (cd manager-fixture/desktop && go build -mod=readonly -tags production -o "$manager" .)
           COMPANION_TEST_MANAGER="$manager" COMPANION_TEST_ADAPTER="$adapter" go test -mod=readonly -count=1 -v ./internal/ojadapter
           go vet -mod=readonly ./internal/ojadapter
