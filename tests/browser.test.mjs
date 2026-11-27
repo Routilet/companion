@@ -204,6 +204,7 @@ test('manual preserves version-scoped reading state and copies a signature',asyn
 test('OJ cached state survives keyed tree refresh, explicit refresh is the only online read',async t=>{
  const p=await setup(t);
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',sourceUrl:'https://accoding.buaa.edu.cn/',target:{kind:'problemset'}};fixture.ojJudges={'/work/A.c':{status:{accepted:true,latest:{id:'12',result:'WA',language:'C'}},checked:'2026-11-27T00:00:00Z'}};fixture.names.push('B.c')});
+ await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();
  await p.locator('#folderMenu summary').click();await p.locator('#refreshTree').click();
  await p.waitForFunction(()=>document.querySelector('.tree-judge:not([hidden])')?.textContent==='AC');
  await p.evaluate(()=>window.originalTreeButton=document.querySelector('.tree-item'));

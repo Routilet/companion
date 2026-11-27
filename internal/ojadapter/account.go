@@ -85,7 +85,7 @@ func (a *Accounts) checkAvailable(ctx context.Context) bool {
  err:=checkManaged(ctx,a.manager)
  a.managedAvailable=err==nil
  a.unavailableReason=""
- if err!=nil {a.unavailableReason=err.Error();a.reset()}
+ if err!=nil {a.unavailableReason=err.Error();if !errors.Is(err,errManagerBusy){a.reset()}}
  return a.managedAvailable
 }
 func (a *Accounts) CheckAvailability(ctx context.Context) AccountView {

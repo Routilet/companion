@@ -17,7 +17,7 @@ export function installOJAccount(call:Call, dialog:HTMLDialogElement,onAvailabil
   logout.hidden=!view?.canRemember&&(!view||view.state==="signed_out");logout.disabled=working||checking;
   login.disabled=working||checking||!view?.available;
   state.textContent=checking?"正在离线检查 Adapter…":!view?"正在读取账号状态…":!view.available?(view.unavailableReason||"请通过 Routilet 安装并启用 Adapter；本地功能不受影响。"):view.state==="signed_out"?"未登录":`${view.nickname||"账号"} · ${view.id||""} · ${view.state==="unverified"?"未能核验":"本次会话已登录"}`;
-  if(view?.saved&&view.state!=="signed_out")state.textContent+=" · 已保存凭据";
+  if(view?.available&&view.saved&&view.state!=="signed_out")state.textContent+=" · 已保存凭据";
  }
  async function update(probe=false){if(checking)return;checking=true;draw();try{view=await call<View>(probe?"OJCheckAdapter":"OJAccountStatus");}catch{view=undefined;note.textContent="无法读取账号状态，请重新检查";}finally{checking=false;draw();onAvailability()}}
  async function perform(method:string,args:unknown[]=[]){
