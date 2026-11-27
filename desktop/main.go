@@ -44,6 +44,7 @@ type Desktop struct{
  prepared *localrun.Submission
  kitPackage string
  kitError string
+ kitPending *kitPending
  manual *localrun.Manual
  managerPath string
  observerDone chan struct{}
@@ -51,16 +52,30 @@ type Desktop struct{
 }
 type Navigation struct { Root string `json:"root"`; Source localrun.Source `json:"source"` }
 func(d *Desktop) nav()Navigation{return Navigation{d.root,d.selected}}
+// Caller holds mu for operations on the selected source. Exports are local,
+// bounded and isolated from installation changes for the duration of each operation.
+func(d *Desktop) installedKit()(string,func(),error){
+ if d.kitPackage!=""&&d.managerPath==""{return d.kitPackage,func(){},nil}
+ return localrun.ResolveSessionKit(d.managerPath)
+}
+func(d *Desktop) KitCreationWarning()string{d.mu.Lock();defer d.mu.Unlock();return d.kitError}
 func(d *Desktop) KitStatus()localrun.KitStatus{
- d.mu.Lock();p,reason:=d.kitPackage,d.kitError;d.mu.Unlock()
- if reason!=""{return localrun.KitStatus{Path:p,Error:reason}}
- k,e:=localrun.LoadKitPackage(p);if e!=nil{return localrun.KitStatus{Path:p,Error:e.Error()}}
- return localrun.KitStatus{Path:p,Version:k.Version}
+ d.mu.Lock();defer d.mu.Unlock()
+ p,cleanup,e:=d.installedKit();defer cleanup()
+ if e!=nil{return localrun.KitStatus{Error:e.Error()}}
+ k,e:=localrun.LoadKitPackage(p);if e!=nil{return localrun.KitStatus{Error:e.Error()}}
+ return localrun.KitStatus{Version:k.Version}
+}
+func(d *Desktop) loadManual()(localrun.Manual,error){
+ // An explicit snapshot always wins, including its validation failure.
+ if m,found,e:=localrun.LoadSnapshotManual(d.selected.Path);found||e!=nil{return m,e}
+ p,cleanup,e:=d.installedKit();defer cleanup();if e!=nil{return localrun.Manual{},e}
+ return localrun.LoadManual(d.selected.Path,p)
 }
 func(d *Desktop) OpenManual()(localrun.Manual,error){
  d.mu.Lock();defer d.mu.Unlock()
  d.manual=nil
- m,e:=localrun.LoadManual(d.selected.Path,d.kitPackage)
+ m,e:=d.loadManual()
  if e==nil{d.manual=&m}
  return m,e
 }
@@ -72,7 +87,7 @@ func(d *Desktop) SearchManual(query string)([]localrun.ReferenceHit,error){
 func(d *Desktop) CopyManualExample(id,key,fingerprint string)error{
  d.mu.Lock()
  if d.manual==nil||d.manual.Fingerprint!=fingerprint{d.mu.Unlock();return errors.New("手册已变化，请重新打开")}
- m,e:=localrun.LoadManual(d.selected.Path,d.kitPackage)
+ m,e:=d.loadManual()
  if e!=nil||m.Fingerprint!=fingerprint||m.Origin!=d.manual.Origin||m.SourcePath!=d.manual.SourcePath{d.mu.Unlock();return errors.New("资源或当前文件已变化，请重新打开手册")}
  example,e:=m.Example(id,key);d.mu.Unlock()
  if e!=nil{return e}
@@ -82,7 +97,7 @@ func(d *Desktop) CopyManualExample(id,key,fingerprint string)error{
 func(d *Desktop) CopyManualSignature(id,key,fingerprint,signature string)error{
  d.mu.Lock()
  if d.manual==nil||d.manual.Fingerprint!=fingerprint{d.mu.Unlock();return errors.New("手册已变化，请重新打开")}
- m,e:=localrun.LoadManual(d.selected.Path,d.kitPackage)
+ m,e:=d.loadManual()
  if e!=nil||m.Fingerprint!=fingerprint||m.Origin!=d.manual.Origin||m.SourcePath!=d.manual.SourcePath{d.mu.Unlock();return errors.New("资源或当前文件已变化，请重新打开手册")}
  valid:=false
  for _,c:=range m.Reference.Categories{for _,entry:=range c.Entries{if entry.ID!=id{continue};signatures:=entry.Signatures
@@ -227,7 +242,9 @@ func(d *Desktop) Create(dir,name string)(Navigation,error){
  }
  if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")}
  if b,e:=ojadapter.LoadBinding(filepath.Join(target,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
- s,e:=localrun.CreateSourceWithKit(root,target,name,d.kitPackage);if e!=nil{return Navigation{},e}
+ d.kitError=""
+ packageRoot:="";cleanup:=func(){};if strings.EqualFold(filepath.Ext(name),".c"){var kitErr error;packageRoot,cleanup,kitErr=d.installedKit();if kitErr!=nil{packageRoot="";d.kitError=kitErr.Error()}else{d.kitError=""}};defer cleanup()
+ s,e:=localrun.CreateSourceWithKit(root,target,name,packageRoot);if e!=nil{return Navigation{},e}
  d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil
 }
 func(d *Desktop) Rename(name string)(Navigation,error){
@@ -316,14 +333,11 @@ func(d *Desktop) shutdown(){
  // while a debugger may need to clean up the inferior.
  if observerDone!=nil{<-observerDone}
 }
-var buildVersion="0.1.0-beta.5"
+var buildVersion="0.1.0-beta.6"
 func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
  if len(os.Args)==2&&os.Args[1]=="--check-install"{p,cleanup,e:=localrun.ResolveSessionKit(os.Getenv(localrun.RoutiletExecutableEnv));if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};defer cleanup();k,e:=localrun.LoadKitPackage(p);if e!=nil{cleanup();fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
- kit,cleanup,e:=localrun.ResolveSessionKit(os.Getenv(localrun.RoutiletExecutableEnv))
- defer cleanup()
- d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewManagedAccounts(os.Getenv(localrun.RoutiletExecutableEnv),os.Getenv(ojadapter.AccountPreviewEnv))}
- if e!=nil{d.kitError=e.Error()}
+ d:=&Desktop{managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewManagedAccounts(os.Getenv(localrun.RoutiletExecutableEnv),os.Getenv(ojadapter.AccountPreviewEnv))}
  if path,e:=localrun.SettingsPath();e==nil{d.settingsPath=path;if s,e:=localrun.LoadSettings(path);e==nil{d.settings=s}else{d.settingsError=e.Error()}}else{d.settingsError=e.Error()}
  if len(os.Args)==1&&d.settings.Root!=""{
   if root,e:=localrun.OpenDirectory(d.settings.Root);e==nil{d.root=root;if d.settings.Selected!=""&&!filepath.IsAbs(d.settings.Selected){if p,e:=localrun.Within(root,filepath.Join(root,d.settings.Selected));e==nil{d.selected,_=localrun.Open(p)}}}
@@ -340,5 +354,5 @@ func main(){
  d.native=app
  win:=app.Window.NewWithOptions(application.WebviewWindowOptions{Title:"Companion",Width:1000,Height:700,URL:"/",EnableFileDrop:true})
  win.OnWindowEvent(events.Common.WindowFilesDropped,func(e *application.WindowEvent){if ctx:=e.Context();ctx!=nil{d.mu.Lock();d.drop=append([]string(nil),ctx.DroppedFiles()...);d.mu.Unlock()}})
- if e:=app.Run();e!=nil{cleanup();log.Fatal(e)}
+ if e:=app.Run();e!=nil{log.Fatal(e)}
 }

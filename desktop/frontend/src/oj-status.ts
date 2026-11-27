@@ -1,15 +1,15 @@
 type Call=<T>(method:string,...args:unknown[])=>Promise<T>;
-import {renderJudge,type Judge} from "./judge-detail.js";
+import {renderJudge,parseDetail,type Judge} from "./judge-detail.js";
 type View={status:{accepted:boolean;latest?:Judge};checked:string};
 const el=(id:string)=>document.getElementById(id)!;
 export function installOJStatus(call:Call,paths:()=>string[],selected:()=>string,draw:()=>void,notify:(s:string)=>void,canPoll:()=>boolean){
  let cache:Record<string,View>={},epoch=0,pollEpoch=0;
  const detail=el("ojDetailDialog") as HTMLDialogElement;el("ojDetailClose").onclick=()=>detail.close();
- el("ojDetailBtn").onclick=()=>{const j=cache[selected()]?.status.latest;if(j){renderJudge(el("ojDetailBody"),j);detail.showModal()}};
- function paint(){const v=cache[selected()];const area=el("ojJudgeInfo");area.hidden=!selected()||el("ojBinding").hidden||el("ojImport").hidden;el("ojJudgeText").textContent=v?`${v.status.accepted?"曾 AC":"当前记录未发现 AC"} · 最近可见提交 ${v.status.latest?"#"+v.status.latest.id+" · "+v.status.latest.result:"无"} · ${new Date(v.checked).toLocaleTimeString()}`:"尚未刷新在线评测";el("ojDetailBtn").hidden=area.hidden||!v?.status.latest;if(detail.open&&v?.status.latest)renderJudge(el("ojDetailBody"),v.status.latest);draw()}
+ el("ojDetailBtn").onclick=()=>{const j=cache[selected()]?.status.latest;if(j)renderJudge(el("ojDetailBody"),j);else el("ojDetailBody").textContent="尚无可见提交结果";el("ojDetailMeta").textContent=cache[selected()]?"查询时间："+new Date(cache[selected()].checked).toLocaleString():"尚未查询";detail.showModal()};
+ function paint(){const v=cache[selected()];const area=el("ojJudgeInfo");area.hidden=!selected()||el("ojBinding").hidden||el("ojImport").hidden;const latest=v?.status.latest,rows=latest?parseDetail(latest):null;el("ojJudgeText").textContent=v?[v.status.accepted?"曾 AC":"",latest?.result??"无提交",rows?rows.filter(r=>r.code==="AC").length+"/"+rows.length:"",latest?.score??""].filter(Boolean).join(" · "):"尚未查询评测";el("ojDetailBtn").hidden=area.hidden;el("ojDetailBtn").title="在线评测详情；曾 AC 不代表当前源码正确";if(detail.open){if(v?.status.latest)renderJudge(el("ojDetailBody"),v.status.latest);else el("ojDetailBody").textContent="尚无可见提交结果";el("ojDetailMeta").textContent=v?"查询时间："+new Date(v.checked).toLocaleString():"尚未查询"}draw()}
  async function refreshLocal(){if(el("ojImport").hidden){clear();return}const n=++epoch;try{const a=await call<{available:boolean}>("OJAccountStatus");if(n!==epoch)return;if(!a.available){clear();return}const p=Array.from(new Set([selected(),...paths()].filter(Boolean))).slice(0,512);const v=await call<Record<string,View>>("OJCachedJudges",p);if(n===epoch){cache=v??{};paint()}}catch{if(n===epoch){cache={};paint()}}}
  function clear(){epoch++;pollEpoch++;cache={};if(detail.open)detail.close();el("ojDetailBody").replaceChildren();paint()}
- function mark(path:string){if(el("ojImport").hidden)return "";const v=cache[path];return v?(v.status.accepted?"AC":v.status.latest?.result??""):""}
+ function mark(path:string){if(el("ojImport").hidden)return "";const v=cache[path];return v?(v.status.accepted?"AC":v.status.latest?.result??"未提交"):""}
  async function refresh(list:string[]){if(el("ojImport").hidden)return;pollEpoch++;try{const n=await call<number>("OJRefreshJudges",list);notify(`已刷新 ${n} 道关联题目`)}catch(e){notify(String(e))}finally{await refreshLocal()}}
  function poll(id:string,result:string,onResult?:(j:Judge)=>void){if(el("ojImport").hidden)return;const n=++pollEpoch;const until=Date.now()+60000;void refreshLocal();if(result!=="WT"&&result!=="JG"){void final();return}
   async function final(){try{const v=await call<Judge>("OJPollReceipt",id);if(n!==pollEpoch)return;await refreshLocal();if(n!==pollEpoch)return;notify(`提交 #${id} · ${v.result}`);onResult?.(v)}catch{/* manual refresh remains available */}}

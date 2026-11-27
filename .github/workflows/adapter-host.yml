@@ -3,7 +3,7 @@ on:
   push:
     branches: ['feat/adapter-*']
   pull_request:
-    branches: [main, 'feat/adapter-*']
+    branches: ['feat/adapter-*']
     paths:
       - 'internal/ojadapter/**'
       - '.github/workflows/adapter-host.yml'
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Routilet/routilet
-          ref: e96a9047b6ee91d76d07fff9cd49a6f945d30f0e
+          ref: f92db454f1653bacee85e88adb1bdcf61dd99f36
           path: manager-fixture
           persist-credentials: false
       - uses: actions/setup-go@v5

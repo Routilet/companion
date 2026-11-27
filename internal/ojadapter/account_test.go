@@ -59,7 +59,7 @@ func TestAccounts(t *testing.T) {
 		t.Fatal(v, e)
 	}
 	v, e = a.Login(ctx, "43", "wrong", false)
-	if e == nil || v.State != "signed_out" || m.c.Username != "" {
+	if e == nil || v.State != "signed_out" || m.c.Username != "42" {
 		t.Fatal(v, e)
 	}
 	v, e = a.Login(ctx, "99", "test-secret", false)

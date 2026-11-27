@@ -29,6 +29,8 @@ type ojAccountService interface {
 type ojPending struct {
 	root, token string
 	plan        ojadapter.Plan
+ result ojadapter.ImportResult
+ ext string
 }
 type OJPreview struct {
 	Token string         `json:"token"`
@@ -90,7 +92,7 @@ func (d *Desktop) ojPreviewImport(link, ext string, attach bool, destination str
 		return OJPreview{}, e
 	}
 	token := fmt.Sprint(seq)
-	d.ojPending = &ojPending{root, token, p}
+	d.ojPending = &ojPending{root:root,token:token,plan:p,result:result,ext:ext}
 	return OJPreview{token, p}, nil
 }
 func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
@@ -109,7 +111,9 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 	if _, e := localrun.Within(d.root, p.Directory); e != nil {
 		return out, e
 	}
-	var first localrun.Source
+	d.kitError=""
+ var first localrun.Source
+ packageRoot:="";cleanup:=func(){};for _,row:=range p.Rows{if row.Action=="create"&&strings.EqualFold(filepath.Ext(row.Name),".c"){var err error;packageRoot,cleanup,err=d.installedKit();if err!=nil{packageRoot="";d.kitError=err.Error()}else{d.kitError=""};break}};defer cleanup()
 	for _, row := range p.Rows {
 		if row.Action == "skip" {
 			out.Skipped = append(out.Skipped, row.Name)
@@ -125,7 +129,7 @@ func (d *Desktop) OJApplyImport(token string) (OJApplyResult, error) {
 		if row.Action == "create" {
 			dir:=filepath.Dir(path)
    if p.Archive{e=ensureImportDir(d.root,p.Directory,dir)}
-   if e==nil{s, e = localrun.CreateSourceWithKit(d.root, dir, filepath.Base(path), d.kitPackage)}
+   if e==nil{s, e = localrun.CreateSourceWithKit(d.root, dir, filepath.Base(path), packageRoot)}
 		} else {
 			if _, e = localrun.Within(d.root, path); e == nil {
 				s, e = localrun.Open(path)

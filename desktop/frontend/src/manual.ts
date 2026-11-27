@@ -115,7 +115,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
    model=m;entries=new Map(m.reference.categories.flatMap(c=>c.entries.map(e=>[e.id,e] as const)));
    version.textContent="Exam Kit "+m.reference.version+(m.origin==="snapshot"?" · 当前文件资源快照":" · 已安装资源")+" · "+entries.size+" 项";
    const previous=saved.get(m.fingerprint);openSections=new Set(previous?.expanded??[]);tree();if(previous?.id&&entries.has(previous.id)){show(previous.id,previous.key);detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}else notes();search.disabled=false;setStatus("");search.focus()
-  }catch(e){if(session===generation&&dialog.open){setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在设置中准备已安装 Exam Kit。"))}}
+  }catch(e){if(session===generation&&dialog.open){setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
  }
  el<HTMLButtonElement>("manualBtn").onclick=()=>void open();
  el<HTMLButtonElement>("manualClose").onclick=()=>dialog.close();

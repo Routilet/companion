@@ -1,38 +1,37 @@
-// Settings-only account management. No automatic launch, keychain access or login.
-type View = {state:"signed_in"|"signed_out"|"unverified";id?:string;nickname?:string;available:boolean;canRemember:boolean;saved:boolean;warning?:string;unavailableReason?:string};
-type Call = <T>(method:string,...args:unknown[])=>Promise<T>;
-export function installOJAccount(call:Call, dialog:HTMLDialogElement,onAvailability:()=>void){
- const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
- const field=el<HTMLFieldSetElement>("ojAccountFields"), user=el<HTMLInputElement>("ojUsername"), pass=el<HTMLInputElement>("ojPassword"), remember=el<HTMLInputElement>("ojRemember"), note=el("ojAccountNotice"), state=el("ojAccountState");
- const login=el<HTMLButtonElement>("ojLogin"),restore=el<HTMLButtonElement>("ojRestore"),refresh=el<HTMLButtonElement>("ojRefresh"),logout=el<HTMLButtonElement>("ojLogout");
- let view:View|undefined,working=false,checking=false;
- const check=el<HTMLButtonElement>("ojCheckAgain");
- function clearPassword(){pass.value="";remember.checked=false;}
+type View={state:"signed_in"|"signed_out"|"unverified";id?:string;nickname?:string;available:boolean;canRemember:boolean;saved:boolean;warning?:string;unavailableReason?:string};
+type Call=<T>(method:string,...args:unknown[])=>Promise<T>;
+export function installOJAccount(call:Call,dialog:HTMLDialogElement,onAvailability:()=>void){
+ const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
+ const btn=(id:string)=>el<HTMLButtonElement>(id),field=el<HTMLFieldSetElement>("ojAccountFields"),user=el<HTMLInputElement>("ojUsername"),pass=el<HTMLInputElement>("ojPassword"),remember=el<HTMLInputElement>("ojRemember"),note=el("ojAccountNotice"),state=el("ojAccountState"),inline=el("ojAccountInline");
+ let view:View|undefined,working:Promise<void>|undefined,attempted=false,notice="";
  function draw(){
-  check.disabled=working||checking;
-  field.disabled=working||checking||!view?.available;
-  remember.disabled=!view?.canRemember||working;
-  restore.hidden=!view?.canRemember;restore.disabled=working||checking||!view?.available;
-  refresh.hidden=!view||view.state==="signed_out";refresh.disabled=working||checking||!view?.available;
-  logout.hidden=!view?.canRemember&&(!view||view.state==="signed_out");logout.disabled=working||checking;
-  login.disabled=working||checking||!view?.available;
-  state.textContent=checking?"正在离线检查 Adapter…":!view?"正在读取账号状态…":!view.available?(view.unavailableReason||"请通过 Routilet 安装并启用 Adapter；本地功能不受影响。"):view.state==="signed_out"?"未登录":`${view.nickname||"账号"} · ${view.id||""} · ${view.state==="unverified"?"未能核验":"本次会话已登录"}`;
-  if(view?.available&&view.saved&&view.state!=="signed_out")state.textContent+=" · 已保存凭据";
+  const pending=!!working,available=!!view?.available,signed=view?.state==="signed_in"||view?.state==="unverified";
+  const text=pending?"正在连接…":!available?(view?.unavailableReason||"Adapter 不可用"):signed?(view?.nickname||"Accoding")+" · "+(view?.state==="unverified"?"未核验":"已登录"):"登录 Accoding";
+  btn("ojAccountEntry").textContent=text;state.textContent=text;inline.textContent=notice;inline.hidden=!notice;note.textContent=notice;
+  field.disabled=pending||!available;remember.disabled=!view?.canRemember||pending;
+  btn("ojLogin").disabled=pending||!available;btn("ojCheckAgain").disabled=pending;
+  btn("ojRestore").hidden=!view?.canRemember||!!signed;btn("ojRestore").disabled=pending||!available;
+  btn("ojRefresh").hidden=!signed;btn("ojRefresh").disabled=pending||!available;
+  btn("ojLogout").hidden=!signed&&!view?.canRemember;btn("ojLogout").disabled=pending;
+  el("adapterConfigStatus").textContent=available?"可用":view?.unavailableReason||"不可用";
  }
- async function update(probe=false){if(checking)return;checking=true;draw();try{view=await call<View>(probe?"OJCheckAdapter":"OJAccountStatus");}catch{view=undefined;note.textContent="无法读取账号状态，请重新检查";}finally{checking=false;draw();onAvailability()}}
+ function set(v:View){view=v;draw()}
+ async function status(probe=false){try{view=await call<View>(probe?"OJCheckAdapter":"OJAccountStatus")}catch(e){view=undefined;notice=String(e)}draw();return view}
  async function perform(method:string,args:unknown[]=[]){
-  if(working||checking)return;working=true;note.textContent="正在处理…";draw();
-  try{view=await call<View>(method,...args);note.textContent=view.warning|| (method==="OJLogout"?"已注销并清理已保存凭据。":"操作完成。")}
-  catch(e){note.textContent=String(e);await update();}
-  finally{working=false;clearPassword();draw();onAvailability();}
+  if(working){await working;return}
+  const task=(async()=>{notice="";try{view=await call<View>(method,...args);notice=view.warning||""}catch(e){notice=String(e);try{view=await call<View>("OJAccountStatus")}catch{/* preserve error */}}})();
+  working=task;draw();try{await task}finally{working=undefined;pass.value="";draw();onAvailability()}
  }
- check.onclick=()=>void update(true);
- login.onclick=()=>{const name=user.value.trim(),secret=pass.value;if(!name||!secret){note.textContent="请输入账号和密码。";return;}const save=remember.checked;clearPassword();void perform("OJLogin",[name,secret,save]);};
- restore.onclick=()=>void perform("OJRestore");
- refresh.onclick=()=>void perform("OJRefresh");
- logout.onclick=()=>void perform("OJLogout");
- dialog.addEventListener("close",()=>{clearPassword();user.value="";});
- // Closing settings never cancels or retries a request. Disable reopening actions
- // until the active operation completes; the rest of Companion is independent.
- return {open(){clearPassword();if(!working&&!checking){note.textContent="";void update(true);}else draw();}};
+ let entering:Promise<void>|undefined;async function enter(){if(entering)return entering;if(attempted)return;attempted=true;const task=(async()=>{const v=await status();if(v?.available&&v.state==="signed_out"&&v.canRemember)await perform("OJRestore")})();entering=task;try{await task}finally{entering=undefined;onAvailability()}}
+ function open(){if(!dialog.open)dialog.showModal();pass.value="";if(!working)void status()}
+ async function requireLogin(){if(entering)await entering;if(working)await working;const v=await status();if(v?.available&&(v.state==="signed_in"||v.state==="unverified"))return true;open();await new Promise<void>(r=>dialog.addEventListener("close",()=>r(),{once:true}));if(working)await working;const after=await status();return !!after?.available&&(after.state==="signed_in"||after.state==="unverified")}
+ btn("ojAccountEntry").onclick=open;btn("ojAccountClose").onclick=()=>dialog.close();
+ btn("ojCheckAgain").onclick=()=>void status(true).then(onAvailability);
+ btn("componentCheck").onclick=()=>void status(true).then(onAvailability);
+ btn("ojLogin").onclick=()=>{const u=user.value.trim(),p=pass.value;if(!u||!p){notice="请输入账号和密码";draw();return}attempted=true;pass.value="";void perform("OJLogin",[u,p,remember.checked]).then(()=>{if(view?.state==="signed_in"&&dialog.open&&!notice)dialog.close()})};
+ btn("ojRestore").onclick=()=>{attempted=true;void perform("OJRestore").then(()=>{if(view?.state==="signed_in"&&dialog.open&&!notice)dialog.close()})};
+ btn("ojRefresh").onclick=()=>void perform("OJRefresh");
+ btn("ojLogout").onclick=()=>{attempted=true;void perform("OJLogout")};
+ dialog.addEventListener("close",()=>{pass.value="";user.value="";remember.checked=false});
+ return {enter,requireLogin,set,status,open,connecting:()=>!!working||!!entering};
 }

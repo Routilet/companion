@@ -48,7 +48,7 @@ func ResolveSessionKit(manager string)(string,func(),error){
  if !filepath.IsAbs(manager){return "",noop,errors.New("Routilet 调用入口无效")}
  p:=process(context.Background(),manager,[]string{"--resource-probe"},filepath.Dir(manager),"",nil,5*time.Second)
  if p.State!="ok"||strings.TrimSpace(p.Stdout)!=ResourceProtocol{return "",noop,errors.New("请更新 Routilet 至支持资源协议的版本")}
- p=process(context.Background(),manager,[]string{"--resource-export","c-exam-kit"},filepath.Dir(manager),"",nil,15*time.Second)
+ p=retryKitExport(func()Process{return process(context.Background(),manager,[]string{"--resource-export","c-exam-kit"},filepath.Dir(manager),"",nil,15*time.Second)},time.Sleep)
  if p.State!="ok"{return "",noop,fmt.Errorf("C Exam Kit 不可用，请在 Routilet 安装、启用或修复后重新打开 Companion: %s %s",p.State,p.Stderr)}
  return importManagedKit([]byte(p.Stdout))
 }
