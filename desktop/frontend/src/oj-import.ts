@@ -54,7 +54,7 @@ export function installOJImport<T>(call:Call){
    for(const r of rows??[]){
     const button=document.createElement("button");button.type="button";button.className="recent-contest";button.setAttribute("aria-pressed","false");
     const name=document.createElement("span");name.textContent=r.title;const meta=document.createElement("small");meta.textContent=[r.start.slice(0,10),r.status].filter(Boolean).join(" · ");button.append(name,meta);
-    button.onclick=()=>{contestId=r.id;for(const item of recent.querySelectorAll("button"))item.setAttribute("aria-pressed",String(item===button));update()};recent.append(button)
+    button.onclick=()=>{contestId=r.id;recent.querySelectorAll("button").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));update()};recent.append(button)
    }
    notice.textContent=rows?.length?"":"没有近期比赛，可通过链接导入。";update();
   }).catch(()=>{if(dialog.open&&runEpoch===importEpoch){loading=false;notice.textContent="近期比赛暂不可用，可通过链接导入。";update()}});
