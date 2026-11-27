@@ -28,6 +28,9 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById
 const btn=(id:string)=>el<HTMLButtonElement>(id);
 const dialogs=installDialogs();
 const input=el<HTMLTextAreaElement>("input"),expected=el<HTMLTextAreaElement>("expected"),compare=el<HTMLInputElement>("compare"),compiler=el<HTMLInputElement>("compiler");
+const expansionByRoot=new Map<string,Set<string>>();
+function restoreExpansion(path:string):string[]{try{const v=JSON.parse(localStorage.getItem("companion.expanded")??"null");return v?.root===path&&Array.isArray(v.paths)?v.paths.filter((p:unknown)=>typeof p==="string").slice(0,128):[]}catch{return []}}
+function rememberExpansion(){try{if(root)localStorage.setItem("companion.expanded",JSON.stringify({root,paths:[...expanded].slice(0,128)}))}catch{/* optional UI state */}}
 let root="",expanded=new Set<string>(),treeEntries=new Map<string,Entry[]>(),refreshing=false,navEpoch=0,seenMissing=new Set<string>();
 const compilerByLanguage:Record<string,string>={c:"",cpp:""};
 let observing=false,observerPolling=false,rawResult=false;
@@ -43,7 +46,7 @@ async function call<T>(method:string,...args:unknown[]):Promise<T>{
 function markStale(){if(last&&!last.stale){last.stale=true;renderTabs();renderResult()}}
 function changes(){dirty=true;markStale();updateControls();}
 function updateControls(){
- btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("new").disabled=btn("refreshTree").disabled=busy||!root;btn("ojImport").disabled=busy||!root;btn("ojRefreshTree").disabled=busy||!root;btn("ojRefreshCurrent").disabled=busy||!source;btn("ojRefreshTree").hidden=btn("ojImport").hidden;btn("ojOpenOriginal").disabled=btn("ojUnbind").disabled=busy||!source;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
+ btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("editorOptions").disabled=busy||!source;btn("new").disabled=busy||!runtime;btn("refreshTree").disabled=busy||!root;btn("locateFile").disabled=busy||!source;btn("collapseTree").disabled=btn("newRootFolder").disabled=busy||!root;btn("ojImport").disabled=busy||!root;btn("ojRefreshTree").disabled=busy||!root;btn("ojRefreshCurrent").disabled=busy||!source;btn("ojRefreshTree").hidden=btn("ojImport").hidden;btn("ojOpenOriginal").disabled=btn("ojUnbind").disabled=busy||!source;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
  btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
@@ -72,7 +75,7 @@ async function reload(){loaded=false;updateControls();try{applySet(await call<Ca
 async function select(nav:Nav){
  if(!nav.root)return;
  navEpoch++;
- if(root!==nav.root){root=nav.root;expanded=new Set([root]);treeEntries.clear();seenMissing.clear()}
+ if(root!==nav.root){if(root)expansionByRoot.set(root,new Set(expanded));root=nav.root;expanded=new Set(expansionByRoot.get(root)??[root,...restoreExpansion(root)]);treeEntries.clear();seenMissing.clear()}
  el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
  el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
@@ -89,18 +92,48 @@ async function showOrphans(){
  for(const o of list){const b=document.createElement("button");b.textContent=o.name+" · "+o.count+" 组 · 恢复";b.onclick=()=>void navigate(async()=>{if(!await dialogs.confirm("复制旧样例到当前文件？原数据保留。"))return;applySet(await call<CaseSet>("Restore",o.name,revision));markStale();await showOrphans()});box.append(b)}
  }catch(e){box.append(node("p",String(e),"muted"))}
 }
+const fileNodes=new Map<string,{wrap:HTMLElement;row:HTMLElement;button:HTMLButtonElement;arrow:HTMLElement;icon:HTMLElement;name:HTMLElement;more:HTMLButtonElement;child:HTMLElement;judge:HTMLElement}>();
+const natural=new Intl.Collator(undefined,{numeric:true,sensitivity:"base"});
 function drawTree(){
- const host=el("file"),scroll=host.scrollTop;host.replaceChildren();
+ const host=el("file"),scroll=host.scrollTop,seen=new Set<string>();
  function branch(dir:string,container:HTMLElement,depth:number){
   if(depth>24)return;
-  for(const e of treeEntries.get(dir)??[]){
-   const row=node("div","","tree-row");const b=document.createElement("button");b.className="tree-item";b.textContent=(e.directory?(expanded.has(e.path)?"▾ ":"▸ "):"  ")+e.name;b.title=e.path;b.disabled=busy;b.setAttribute("aria-current",String(source?.path===e.path));
-   if(e.directory){b.onclick=()=>{if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);void refreshTree(true)}}}else{b.onclick=()=>void navigate(async()=>select(await call<Nav>("Select",e.path)))}
-   row.append(b);if(!e.directory){const mark=ojStatus.mark(e.path);if(mark){const tag=node("span",mark,"muted note");tag.title="远程评测缓存；AC 表示曾通过，不代表当前源码";row.append(tag)}}if(!e.directory&&source?.path===e.path){row.classList.add("selected");const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.title="当前文件操作";more.setAttribute("aria-label","当前文件操作");more.disabled=busy;more.onclick=()=>openFileMenu(more);b.oncontextmenu=ev=>{ev.preventDefault();if(!busy)openFileMenu(more)};row.append(more)}container.append(row);
-   if(e.directory&&expanded.has(e.path)){const child=node("div","","branch");container.append(child);branch(e.path,child,depth+1)}
+  const items=[...(treeEntries.get(dir)??[])].sort((a,b)=>Number(b.directory)-Number(a.directory)||natural.compare(a.name,b.name));
+  let cursor:ChildNode|null=container.firstChild;
+  for(const e of items){
+   seen.add(e.path);let n=fileNodes.get(e.path);
+   if(!n){
+    const wrap=node("div","","tree-node"),row=node("div","","tree-row");
+    const b=node("button","","tree-item") as HTMLButtonElement;b.type="button";
+    const arrow=node("span","","tree-arrow"),icon=node("span","","tree-icon"),name=node("span","","tree-name");
+    arrow.setAttribute("aria-hidden","true");icon.setAttribute("aria-hidden","true");
+    b.append(arrow,icon,name);const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.type="button";
+    const child=node("div","","branch"),judge=node("span","","tree-judge muted note");judge.title="远程评测缓存；AC 表示曾通过，不代表当前源码";row.append(b,judge,more);wrap.append(row,child);
+    n={wrap,row,button:b,arrow,icon,name,more,child,judge};fileNodes.set(e.path,n)
+   }
+   const {wrap,row,button:b,arrow,icon,name,more,child,judge}=n;
+   const isExpanded=e.directory&&expanded.has(e.path),isSelected=!e.directory&&source?.path===e.path;
+   row.classList.toggle("selected",isSelected);b.setAttribute("aria-current",String(isSelected));b.title=e.path;b.disabled=busy;
+   if(e.directory)b.setAttribute("aria-expanded",String(isExpanded));else b.removeAttribute("aria-expanded");
+   arrow.classList.toggle("expanded",isExpanded);arrow.classList.toggle("leaf",!e.directory);
+   icon.className="tree-icon "+(e.directory?"folder-icon":"source-icon");name.textContent=e.name;const mark=e.directory?"":ojStatus.mark(e.path);judge.textContent=mark;judge.hidden=!mark;
+   b.onclick=()=>{if(e.directory){if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);drawTree();void refreshTree(true)}}else if(!isSelected)void navigate(async()=>select(await call<Nav>("Select",e.path)))};
+   more.hidden=!e.directory&&!isSelected;more.disabled=busy;more.title=e.directory?"文件夹操作":"当前文件操作";more.setAttribute("aria-label",more.title);
+   more.onclick=()=>openFileMenu(more,e);
+   b.oncontextmenu=ev=>{if(e.directory||isSelected){ev.preventDefault();if(!busy)openFileMenu(more,e)}};
+   child.hidden=!isExpanded;if(isExpanded)branch(e.path,child,depth+1);
+   if(wrap!==cursor)container.insertBefore(wrap,cursor);cursor=wrap.nextSibling;
   }
+  while(cursor){const next=cursor.nextSibling;cursor.remove();cursor=next}
  }
- if(root)branch(root,host,0);host.scrollTop=scroll;
+ if(root)branch(root,host,0);else host.replaceChildren();
+ for(const [path,n] of fileNodes)if(!seen.has(path)){n.wrap.remove();fileNodes.delete(path)}
+ host.scrollTop=scroll;rememberExpansion();
+}
+async function locateFile(){
+ if(!source)return;let dir=source.directory;
+ while(dir&&dir!==root){expanded.add(dir);const next=dir.replace(/[\\/][^\\/]+$/,"");if(next===dir||next.length<root.length)break;dir=next}
+ await refreshTree(true);drawTree();fileNodes.get(source.path)?.button.scrollIntoView({block:"nearest"});fileNodes.get(source.path)?.button.focus({preventScroll:true})
 }
 async function refreshTree(force=false){
  if(!root||refreshing||(!force&&busy)||(!force&&!fileMenu.hidden))return;
@@ -184,9 +217,9 @@ function renderResult(){
 }
 function show(r:Result){last=r;rawResult=false;status.textContent="";renderTabs();renderResult()}
 btn("rawToggle").onclick=()=>{rawResult=!rawResult;renderResult()};
-const fileMenu=el("fileMenu");let menuAnchor:HTMLElement|undefined;
+const fileMenu=el("fileMenu");let menuAnchor:HTMLElement|undefined,menuEntry:Entry|undefined;
 function closeFileMenu(){fileMenu.hidden=true;menuAnchor=undefined}
-function openFileMenu(anchor:HTMLElement){if(!fileMenu.hidden){closeFileMenu();return}menuAnchor=anchor;fileMenu.hidden=false;const box=anchor.getBoundingClientRect();fileMenu.style.left=Math.max(4,Math.min(box.right-fileMenu.offsetWidth,innerWidth-fileMenu.offsetWidth-4))+"px";fileMenu.style.top=Math.max(4,Math.min(box.bottom,innerHeight-fileMenu.offsetHeight-4))+"px";btn("rename").focus()}
+function openFileMenu(anchor:HTMLElement,entry:Entry){if(!fileMenu.hidden){closeFileMenu();return}menuAnchor=anchor;menuEntry=entry;btn("rename").hidden=entry.directory;btn("reveal").textContent=entry.directory?"打开文件夹":"打开所在目录";fileMenu.hidden=false;const box=anchor.getBoundingClientRect();fileMenu.style.left=Math.max(4,Math.min(box.right-fileMenu.offsetWidth,innerWidth-fileMenu.offsetWidth-4))+"px";fileMenu.style.top=Math.max(4,Math.min(box.bottom,innerHeight-fileMenu.offsetHeight-4))+"px";btn(entry.directory?"newHere":"rename").focus()}
 document.addEventListener("pointerdown",e=>{if(!fileMenu.hidden&&!fileMenu.contains(e.target as Node)&&!menuAnchor?.contains(e.target as Node))closeFileMenu();for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu[open]")))if(!d.contains(e.target as Node))d.open=false});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!fileMenu.hidden){const a=menuAnchor;closeFileMenu();a?.focus()}if(e.key==="Escape")for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu[open]")))d.open=false});
 fileMenu.addEventListener("click",()=>closeFileMenu());
@@ -211,10 +244,13 @@ btn("refreshTree").onclick=()=>void refreshTree(true);
 btn("ojImport").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void navigate(async()=>{const r=await ojImport.run(source?.path??"");if(!r)return;await select(r.nav);status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"")})};
 btn("ojOpenOriginal").onclick=async()=>{const path=source?.path;if(!path||busy)return;try{await call("OJOpenOriginal",path)}catch(e){status.textContent=String(e)}};
 btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await ojImport.refresh(path);await ojStatus.refreshLocal();status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
-btn("new").onclick=()=>void navigate(async()=>{
- if(!root)return;const name=await dialogs.name("新建文件","文件名（C 默认引入 Exam Kit，C++ 为普通模板）","A.c","新建");if(!name)return;
- const dir=source?.directory??root;await select(await call<Nav>("Create",dir,name))
-});
+function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target)await select(await call<Nav>("Create",target.dir,target.name))})}
+btn("new").onclick=()=>void newFile();
+btn("newHere").onclick=()=>{const e=menuEntry;void newFile(e?.directory?e.path:source?.directory??root)};
+async function newFolder(dir:string){if(busy)return;busy=true;updateControls();drawTree();try{const name=await dialogs.name("新建文件夹","在 "+dir+" 中新建文件夹","新文件夹","新建");if(!name)return;const path=await call<string>("CreateFolder",dir,name);expanded.add(dir);expanded.add(path)}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();await refreshTree(true);drawTree()}}
+btn("newFolderHere").onclick=()=>{const e=menuEntry;void newFolder(e?.directory?e.path:source?.directory??root)};
+btn("newRootFolder").onclick=()=>void newFolder(root);
+btn("locateFile").onclick=()=>void locateFile();btn("collapseTree").onclick=()=>{expanded=new Set([root]);drawTree()};
 btn("rename").onclick=()=>void navigate(async()=>{if(!source)return;const name=await dialogs.name("重命名文件","新文件名",source.name,"重命名");if(name&&name!==source.name)await select(await call<Nav>("Rename",name))});
 btn("import").onclick=()=>void navigate(async()=>{if(!loaded)return;const append=cases.length>0;if(append&&!await dialogs.confirm("将导入的测试数据追加到现有样例？"))return;const s=await call<CaseSet|null>("Import",revision,append);if(s){applySet(s);markStale();await showOrphans()}});
 setInterval(()=>{void refreshTree()},1500);
@@ -222,7 +258,7 @@ setInterval(async()=>{
  if(!runtime)return;
  if(runningTest&&!progressCheck){progressCheck=true;try{const p=await call<Progress>("Progress");if(!runningTest)return;const bar=el<HTMLProgressElement>("progress");if(p.phase==="compiling"){bar.removeAttribute("value");el("batchSummary").textContent="正在编译…"}else if(p.phase==="running"){bar.max=Math.max(1,p.total);bar.value=p.completed;el("batchSummary").textContent="正在运行 "+p.completed+" / "+p.total+" 组"}}catch{}finally{progressCheck=false}}
  if(dropCheck)return;dropCheck=true;
- try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||dialogs.isOpen()||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||el<HTMLDialogElement>("manualDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
+ try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||dialogs.isOpen()||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||el<HTMLDialogElement>("manualDialog").open||el<HTMLDialogElement>("editorDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
 },300);
 btn("observe").onclick=async()=>{
  if(busy||observing||!source||!loaded)return;
@@ -234,25 +270,47 @@ setInterval(async()=>{
 },1000);
 function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"Observer 不可用："+o.error:"Observer "+o.version+" · "+o.backend}
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
+function visibleSourcePaths(){const out:string[]=[];function visit(dir:string,depth:number){if(depth>24)return;for(const e of treeEntries.get(dir)??[]){if(!e.directory)out.push(e.path);else if(expanded.has(e.path))visit(e.path,depth+1)}}if(root)visit(root,0);return out}
 const ojAccount=installOJAccount(call,config);
 const ojImport=installOJImport<Nav>(call);
-const ojStatus=installOJStatus(call,()=>[...treeEntries.values()].flat().filter(e=>!e.directory).map(e=>e.path),()=>source?.path??"",drawTree,message=>{status.textContent=message;if(preview.open&&message.startsWith("提交 #"))el("ojSubmitNotice").textContent=message},()=>!busy&&!config.open);
+const ojStatus=installOJStatus(call,visibleSourcePaths,()=>source?.path??"",drawTree,message=>{status.textContent=message;if(preview.open&&message.startsWith("提交 #"))el("ojSubmitNotice").textContent=message},()=>!busy&&!config.open);
 const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message},ojStatus.poll);
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
-btn("openEditor").onclick=async()=>{try{await call("OpenEditor",editorPath.trim());status.textContent="已请求打开编辑器"}catch(e){status.textContent=String(e)}};
-btn("reveal").onclick=async()=>{try{await call("Reveal")}catch(e){status.textContent=String(e)}};
+type EditorOption={name:string;path:string};
+const editorDialog=el<HTMLDialogElement>("editorDialog");
+let editorChoices:EditorOption[]=[];let editorEpoch=0;
+function editorLabel(){return editorPath==="@system"?"系统默认编辑器":editorChoices.find(e=>e.path===editorPath)?.name??editorPath.split(/[\\/]/).at(-1)?.replace(/\.(exe|app)$/i,"")??""}
+function updateEditorLabel(){btn("openEditor").textContent=editorPath?"打开 · "+editorLabel():"打开编辑器"}
+async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="已请求打开 "+editorLabel();return true}catch(e){status.textContent=String(e);return false}}
+async function editorMenu(openAfter:boolean){
+ if(busy||!source||editorDialog.open)return;
+ const epoch=++editorEpoch;editorDialog.showModal();const choices=el("editorChoices"),hint=el("editorHint");choices.replaceChildren();hint.textContent="正在检测本机代码编辑器…";
+ async function pick(path:string){editorDialog.close();if(openAfter)await launchEditor(path);else{editorPath=path;updateEditorLabel();await storeConfig()}}
+ btn("editorClose").onclick=()=>editorDialog.close();
+ btn("editorSystem").onclick=()=>void pick("@system");
+ btn("editorCustom").onclick=async()=>{try{const p=await call<string>("ChooseEditor");if(p&&editorDialog.open&&epoch===editorEpoch)await pick(p)}catch(e){hint.textContent=String(e)}};
+ try{const detected=await call<EditorOption[]>("DetectEditors")??[];if(!editorDialog.open||epoch!==editorEpoch)return;editorChoices=detected;
+ hint.textContent=editorChoices.length?"选择代码编辑器，之后可以随时切换。":"未检测到代码编辑器，请手动选择。";
+ for(const e of editorChoices){const b=node("button",e.name+(e.path===editorPath?" ✓":""),"editor-choice") as HTMLButtonElement;b.title=e.path;b.onclick=()=>void pick(e.path);choices.append(b)}
+ if(openAfter&&!editorPath&&editorChoices.length===1)await pick(editorChoices[0].path);
+ }catch(e){hint.textContent=String(e)}
+}
+btn("openEditor").onclick=async()=>{if(!editorPath){await editorMenu(true);return}if(!await launchEditor(editorPath))await editorMenu(true)};
+btn("editorOptions").onclick=()=>void editorMenu(false);
+btn("reveal").onclick=async()=>{try{if(menuEntry?.directory)await call("RevealFolder",menuEntry.path);else await call("Reveal")}catch(e){status.textContent=String(e)}};
 btn("copy").onclick=async()=>{if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；请核对后再复制或提交。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";el("previewTitle").textContent="复制提交源码";preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest)}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};
 function showKit(k:KitStatus){el("kitStatus").textContent=k.error?"资源不可用："+k.error:"Exam Kit "+k.version+" · "+k.path}
-btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;el<HTMLInputElement>("editorPath").value=editorPath;config.showModal();ojStatus.clear();ojAccount.open();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
+btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;config.showModal();ojStatus.clear();ojAccount.open();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
 btn("closeConfig").onclick=()=>config.close();
 config.addEventListener("close",()=>{void ojImport.refresh(source?.path??"").then(()=>ojStatus.refreshLocal()).then(updateControls)});
 async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true;updateControls();try{await ojStatus.refresh(paths)}finally{busy=false;updateControls()}}
-btn("ojRefreshTree").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void refreshOJ([...treeEntries.values()].flat().filter(e=>!e.directory).map(e=>e.path))};
+btn("ojRefreshTree").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void refreshOJ(visibleSourcePaths())};
 btn("ojRefreshCurrent").onclick=()=>{if(source)void refreshOJ([source.path])};
-btn("saveConfig").onclick=async()=>{compilerByLanguage.c=el<HTMLInputElement>("cc").value.trim();compilerByLanguage.cpp=el<HTMLInputElement>("cxx").value.trim();editorPath=el<HTMLInputElement>("editorPath").value.trim();if(source)compiler.value=compilerByLanguage[language(source)];markStale();await storeConfig();config.close()};
+
+btn("saveConfig").onclick=async()=>{compilerByLanguage.c=el<HTMLInputElement>("cc").value.trim();compilerByLanguage.cpp=el<HTMLInputElement>("cxx").value.trim();if(source)compiler.value=compilerByLanguage[language(source)];markStale();await storeConfig();config.close()};
 compiler.onchange=()=>void storeConfig();
 btn("reload").onclick=()=>void navigate(async()=>{markStale();if(source&&seenMissing.has(source.path))await call("Invalidate",source.path);await reload();if(source&&seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，是否继续使用旧样例？")){loaded=false;return}seenMissing.delete(source.path)}await showOrphans()});
 btn("add").onclick=()=>{cases.push({input:"",expected:null});selected=cases.length-1;changes();renderCases()};
@@ -265,7 +323,7 @@ btn("save").onclick=async()=>{busy=true;updateControls();try{await save()}catch(
 btn("run").onclick=()=>void run(false);btn("all").onclick=()=>void run(true);
 btn("cancel").onclick=async()=>{btn("cancel").disabled=true;try{await call("Cancel")}catch(e){status.textContent=String(e)}};
 window.addEventListener("focus",async()=>{if(last&&!busy&&!dirty){const id=last.runId;try{if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id)markStale()}catch{markStale()}}});
-document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!manual.isOpen()){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!busy){e.preventDefault();void manual.open()}});
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!editorDialog.open&&!manual.isOpen()){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!editorDialog.open&&!busy){e.preventDefault();void manual.open()}});
 window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
-async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;status.textContent="";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
+async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;updateEditorLabel();status.textContent="";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
 void boot();

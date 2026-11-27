@@ -9,6 +9,7 @@ import (
  "os"
  "path/filepath"
  "sync"
+ "strings"
 
  "github.com/Routilet/companion/internal/localrun"
  "github.com/Routilet/companion/internal/ojadapter"
@@ -78,6 +79,19 @@ func(d *Desktop) CopyManualExample(id,key,fingerprint string)error{
  if !d.native.Clipboard.SetText(example){return errors.New("无法写入系统剪贴板")}
  return nil
 }
+func(d *Desktop) CopyManualSignature(id,key,fingerprint,signature string)error{
+ d.mu.Lock()
+ if d.manual==nil||d.manual.Fingerprint!=fingerprint{d.mu.Unlock();return errors.New("手册已变化，请重新打开")}
+ m,e:=localrun.LoadManual(d.selected.Path,d.kitPackage)
+ if e!=nil||m.Fingerprint!=fingerprint||m.Origin!=d.manual.Origin||m.SourcePath!=d.manual.SourcePath{d.mu.Unlock();return errors.New("资源或当前文件已变化，请重新打开手册")}
+ valid:=false
+ for _,c:=range m.Reference.Categories{for _,entry:=range c.Entries{if entry.ID!=id{continue};signatures:=entry.Signatures
+  if len(entry.Variants)>0{signatures=nil;for _,v:=range entry.Variants{if v.Key==key{signatures=append(append([]string{},entry.CommonSignatures...),v.Signatures...);break}}}
+  for _,s:=range signatures{if s==signature{valid=true}}
+ }}
+ d.mu.Unlock();if !valid{return errors.New("未知函数接口")}
+ if !d.native.Clipboard.SetText(signature){return errors.New("无法写入系统剪贴板")};return nil
+}
 func(d *Desktop) ObserverStatus()localrun.ObserverInfo{
  d.mu.Lock();p:=d.managerPath;d.mu.Unlock()
  info,e:=localrun.ProbeManagedObserver(p);if e!=nil{return localrun.ObserverInfo{Error:e.Error()}}
@@ -124,9 +138,20 @@ func(d *Desktop) OpenDropped(path string)(Navigation,error){
  root,e:=localrun.OpenDirectory(path);if e!=nil{return Navigation{},errors.New("请拖入一个 C/C++ 文件或普通文件夹")}
  d.root=root;d.selected=localrun.Source{};d.prepared=nil;return d.nav(),nil
 }
+func(d *Desktop) DetectEditors()[]localrun.EditorOption{return localrun.DetectEditors()}
+func(d *Desktop) ChooseEditor()(string,error){
+ return d.native.Dialog.OpenFile().SetTitle("选择编辑器可执行文件").PromptForSingleSelection()
+}
 func(d *Desktop) OpenEditor(editor string)error{
  d.mu.Lock();p:=d.selected.Path;d.mu.Unlock()
  return localrun.OpenEditor(p,editor)
+}
+func(d *Desktop) CreateFolder(dir,name string)(string,error){
+ d.mu.Lock();defer d.mu.Unlock();if d.running{return "",errors.New("正在运行")};return localrun.CreateFolder(d.root,dir,name)
+}
+func(d *Desktop) RevealFolder(path string)error{
+ d.mu.Lock();root:=d.root;d.mu.Unlock()
+ p,e:=localrun.Within(root,path);if e!=nil{return e};return localrun.RevealDirectory(p)
 }
 func(d *Desktop) Reveal()error{
  d.mu.Lock();p:=d.root;if d.selected.Path!=""{p=d.selected.Directory};d.mu.Unlock()
@@ -181,13 +206,28 @@ func(d *Desktop) Select(path string)(Navigation,error){
  s,e:=localrun.Open(p);if e!=nil{return Navigation{},e}
  d.selected=s;return d.nav(),nil
 }
+// ChooseCreateDirectory is read-only; cancelling or browsing does not change navigation.
+func(d *Desktop) ChooseCreateDirectory()(string,error){
+ p,e:=d.native.Dialog.OpenFile().SetTitle("选择新建文件的位置").CanChooseFiles(false).CanChooseDirectories(true).PromptForSingleSelection()
+ if e!=nil||p==""{return "",e}
+ return localrun.OpenDirectory(p)
+}
 func(d *Desktop) Create(dir,name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running{return Navigation{},errors.New("正在运行")}
+ target,e:=filepath.Abs(dir);if e!=nil{return Navigation{},e}
+ root:=d.root
+ if root==""{root,e=localrun.OpenDirectory(target);if e!=nil{return Navigation{},e};target=root}else if _,e=localrun.Within(root,target);e!=nil{
+  rel,relErr:=filepath.Rel(root,target)
+  // Only explicit external directories may establish a new root. Do not
+  // reinterpret a rejected descendant (hidden, symlink, etc.) as external.
+  if relErr==nil&&rel!=".."&&!filepath.IsAbs(rel)&&!strings.HasPrefix(rel,".."+string(filepath.Separator)){return Navigation{},e}
+  root,e=localrun.OpenDirectory(target);if e!=nil{return Navigation{},e};target=root
+ }
  if filepath.Base(name)!=name||name=="."||name==".."{return Navigation{},errors.New("无效文件名")}
- p,e:=localrun.Within(d.root,dir);if e!=nil{return Navigation{},e};if b,e:=ojadapter.LoadBinding(filepath.Join(p,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
- s,e:=localrun.CreateSourceWithKit(d.root,p,name,d.kitPackage);if e!=nil{return Navigation{},e}
- d.selected=s;return d.nav(),nil
+ if b,e:=ojadapter.LoadBinding(filepath.Join(target,name));e!=nil{return Navigation{},e}else if b!=nil{return Navigation{},errors.New("存在旧题目关联；请勿自动复用")}
+ s,e:=localrun.CreateSourceWithKit(root,target,name,d.kitPackage);if e!=nil{return Navigation{},e}
+ d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil
 }
 func(d *Desktop) Rename(name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()

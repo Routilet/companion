@@ -58,6 +58,12 @@ func ListDirectory(root,dir string)([]Entry,error){
  sort.SliceStable(entries,func(i,j int)bool{if entries[i].Directory!=entries[j].Directory{return entries[i].Directory};return strings.ToLower(entries[i].Name)<strings.ToLower(entries[j].Name)})
  return entries,nil
 }
+func CreateFolder(root,dir,name string)(string,error){
+ // Reuse the cross-platform source-name validation for the basename.
+ if !validName(name+".c")||strings.HasSuffix(name,".")||name!=strings.TrimSpace(name){return "",errors.New("文件夹名称无效")}
+ p,e:=Within(root,dir);if e!=nil{return "",e};if e=safeDir(p,false);e!=nil{return "",e}
+ target:=filepath.Join(p,name);if e=os.Mkdir(target,0700);e!=nil{return "",e};return target,nil
+}
 func validName(n string)bool{
  if n==""||n!=strings.TrimSpace(n)||strings.HasSuffix(n,".")||strings.HasPrefix(n,".")||strings.ContainsAny(n,"/\\<>:\"|?*\x00\r\n")||!sourceExtension(n){return false}
  base:=strings.ToUpper(strings.Split(n,".")[0])

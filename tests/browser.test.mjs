@@ -32,6 +32,11 @@ async function setup(t){
   window.bridge=async(method,...args)=>{
    state.calls.push([method,...args]);
    switch(method){
+   case 'OJAccountStatus':return {available:state.ojAvailable??false,state:state.ojAvailable?'signed_in':'unavailable'};
+   case 'OJBinding':return state.ojBinding??null;
+   case 'OJCachedJudges':return state.ojJudges??{};
+   case 'OJRefreshJudges':return 1;
+   case 'OJSubmissionAvailable':return false;
    case 'Version':return '0.1.0-beta.2';
    case 'Config':return {c:'',cpp:'',editor:'',root,selected:'A.c'};
    case 'ConfigWarning':return '';
@@ -48,6 +53,12 @@ async function setup(t){
    case 'CheckSelected':return true;
    case 'TakeDrop':return null;
    case 'Invalidate':case 'StoreConfig':return;
+   case 'ChooseCreateDirectory':return '/other';
+   case 'DetectEditors':return [{name:'VS Code',path:'/apps/code'}];
+   case 'OpenManual':return {origin:'installed',fingerprint:'fixture-v1',reference:{version:'0.6.10',notes:'## 使用约定\n- 示例',sections:[{title:'输入与输出',entries:['read_number']}],categories:[{title:'数字读写',entries:[{id:'read_number',title:'读取数字',description:'读取一个整数。',example:'int a = read_int();',signatures:['int read_int(void);']}]}]}};
+   case 'SearchManual':return [{id:'read_number',category:'数字读写'}];
+   case 'CopyManualSignature':case 'CopyManualExample':return;
+   case 'OpenEditor':return;
    case 'Create':
     if(state.failCreate)throw Error('文件已存在');
     state.name=args[1];state.names.push(state.name);state.cases=[];state.revision='missing';return nav();
@@ -155,4 +166,43 @@ test('batch results follow selected sample, compare once, and edits invalidate p
  assert.equal(await p.locator('#results .snapshot').count(),1);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='SaveCases').length),1);
  assert.equal(await p.locator('#saved').textContent(),'未保存');
+});
+
+test('explicit new location and editor detection do not depend on system default',async t=>{
+ const p=await setup(t);
+ await p.locator('#new').click();assert.equal(await p.locator('#actionDirectory').textContent(),'/work');
+ await p.locator('#actionBrowse').click();await p.waitForFunction(()=>document.querySelector('#actionDirectory').textContent==='/other');
+ await p.locator('#actionCancel').click();await p.waitForFunction(()=>!document.querySelector('#new').disabled);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='Create').length),0);
+ await p.locator('#openEditor').click();await p.waitForFunction(()=>document.querySelector('#openEditor').textContent.includes('VS Code'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='OpenEditor')),['OpenEditor','/apps/code']);
+});
+
+test('manual preserves version-scoped reading state and copies a signature',async t=>{
+ const p=await setup(t);
+ await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);
+ await p.locator('#manualNav summary').click();await p.locator('#manualNav [data-entry]').click();
+ assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
+ assert.ok(await p.locator('#manualDetail .syntax-keyword').count()>0);
+ await p.getByRole('button',{name:'复制函数接口'}).click();
+ await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='CopyManualSignature'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='CopyManualSignature')),['CopyManualSignature','read_number','','fixture-v1','int read_int(void);']);
+ await p.locator('#manualClose').click();await p.locator('#manualBtn').click();
+ await p.waitForFunction(()=>document.querySelector('#manualDetail h2')?.textContent==='读取数字'&&!document.querySelector('#manualSearch').disabled);
+ assert.equal(await p.locator('#manualNav details').getAttribute('open'),'');
+ await p.locator('#manualSearch').fill('读取');await p.waitForFunction(()=>document.querySelector('#manualNav [data-entry] small'));
+ await p.locator('#manualSearch').press('ArrowDown');await p.locator('#manualSearch').press('Enter');
+ assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
+});
+
+test('OJ cached state survives keyed tree refresh, explicit refresh is the only online read',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',sourceUrl:'https://accoding.buaa.edu.cn/',target:{kind:'problemset'}};fixture.ojJudges={'/work/A.c':{status:{accepted:true,latest:{id:'12',result:'WA',language:'C'}},checked:'2026-11-27T00:00:00Z'}};fixture.names.push('B.c')});
+ await p.locator('#folderMenu summary').click();await p.locator('#refreshTree').click();
+ await p.waitForFunction(()=>document.querySelector('.tree-judge:not([hidden])')?.textContent==='AC');
+ await p.evaluate(()=>window.originalTreeButton=document.querySelector('.tree-item'));
+ await p.evaluate(()=>fixture.names.push('C.c'));
+ await p.waitForFunction(()=>document.querySelectorAll('.tree-item').length===3);
+ assert.equal(await p.evaluate(()=>window.originalTreeButton===document.querySelector('.tree-item')),true);
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges').length),0);
 });
