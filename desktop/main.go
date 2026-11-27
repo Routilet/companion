@@ -9,6 +9,7 @@ import (
  "os"
  "path/filepath"
  "sync"
+ "strings"
 
  "github.com/Routilet/companion/internal/localrun"
  "github.com/wailsapp/wails/v3/pkg/application"
@@ -112,6 +113,10 @@ func(d *Desktop) OpenDropped(path string)(Navigation,error){
  root,e:=localrun.OpenDirectory(path);if e!=nil{return Navigation{},errors.New("请拖入一个 C/C++ 文件或普通文件夹")}
  d.root=root;d.selected=localrun.Source{};d.prepared=nil;return d.nav(),nil
 }
+func(d *Desktop) DetectEditors()[]localrun.EditorOption{return localrun.DetectEditors()}
+func(d *Desktop) ChooseEditor()(string,error){
+ return d.native.Dialog.OpenFile().SetTitle("选择编辑器可执行文件").PromptForSingleSelection()
+}
 func(d *Desktop) OpenEditor(editor string)error{
  d.mu.Lock();p:=d.selected.Path;d.mu.Unlock()
  return localrun.OpenEditor(p,editor)
@@ -168,11 +173,26 @@ func(d *Desktop) Select(path string)(Navigation,error){
  s,e:=localrun.Open(p);if e!=nil{return Navigation{},e}
  d.selected=s;return d.nav(),nil
 }
+// ChooseCreateDirectory is read-only; cancelling or browsing does not change navigation.
+func(d *Desktop) ChooseCreateDirectory()(string,error){
+ p,e:=d.native.Dialog.OpenFile().SetTitle("选择新建文件的位置").CanChooseFiles(false).CanChooseDirectories(true).PromptForSingleSelection()
+ if e!=nil||p==""{return "",e}
+ return localrun.OpenDirectory(p)
+}
 func(d *Desktop) Create(dir,name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
  if d.running{return Navigation{},errors.New("正在运行")}
- s,e:=localrun.CreateSourceWithKit(d.root,dir,name,d.kitPackage);if e!=nil{return Navigation{},e}
- d.selected=s;return d.nav(),nil
+ target,e:=localrun.OpenDirectory(dir);if e!=nil{return Navigation{},e}
+ root:=d.root
+ if root==""{root=target}else if _,e=localrun.Within(root,target);e!=nil{
+  rel,relErr:=filepath.Rel(root,target)
+  // Only explicit external directories may establish a new root. Do not
+  // reinterpret a rejected descendant (hidden, symlink, etc.) as external.
+  if relErr==nil&&rel!=".."&&!filepath.IsAbs(rel)&&!strings.HasPrefix(rel,".."+string(filepath.Separator)){return Navigation{},e}
+  root=target
+ }
+ s,e:=localrun.CreateSourceWithKit(root,target,name,d.kitPackage);if e!=nil{return Navigation{},e}
+ d.root=root;d.selected=s;d.prepared=nil;return d.nav(),nil
 }
 func(d *Desktop) Rename(name string)(Navigation,error){
  d.mu.Lock();defer d.mu.Unlock()
