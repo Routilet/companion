@@ -1,3 +1,4 @@
+import {installOJStatus} from "./oj-status.js";
 import {installOJSubmit} from "./oj-submit.js";
 import {installOJImport} from "./oj-import.js";
 import {installOJAccount} from "./oj-account.js";
@@ -42,7 +43,7 @@ async function call<T>(method:string,...args:unknown[]):Promise<T>{
 function markStale(){if(last&&!last.stale){last.stale=true;renderTabs();renderResult()}}
 function changes(){dirty=true;markStale();updateControls();}
 function updateControls(){
- btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("new").disabled=btn("refreshTree").disabled=busy||!root;btn("ojImport").disabled=busy||!root;btn("ojOpenOriginal").disabled=btn("ojUnbind").disabled=busy||!source;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
+ btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("new").disabled=btn("refreshTree").disabled=busy||!root;btn("ojImport").disabled=busy||!root;btn("ojRefreshTree").disabled=busy||!root;btn("ojRefreshCurrent").disabled=busy||!source;btn("ojRefreshTree").hidden=btn("ojImport").hidden;btn("ojOpenOriginal").disabled=btn("ojUnbind").disabled=busy||!source;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
  btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
@@ -80,7 +81,7 @@ async function select(nav:Nav){
   if(seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，存在旧测试数据。是否继续使用这些样例？")){loaded=false;status.textContent="未确认旧样例；请重新选择文件";}else seenMissing.delete(source.path)}
   if(loaded){const cached=await call<Result|null>("Cached",compiler.value.trim());if(cached){if(seenMissing.has(source.path))cached.stale=true;show(cached)}await showOrphans()}
  }
- await ojImport.refresh(source?.path??"");await refreshTree(true);updateControls();
+ await ojImport.refresh(source?.path??"");await refreshTree(true);await ojStatus.refreshLocal();updateControls();
 }
 async function showOrphans(){
  const box=el("orphans");box.replaceChildren();if(!source||cases.length||dirty||!loaded)return;
@@ -95,7 +96,7 @@ function drawTree(){
   for(const e of treeEntries.get(dir)??[]){
    const row=node("div","","tree-row");const b=document.createElement("button");b.className="tree-item";b.textContent=(e.directory?(expanded.has(e.path)?"▾ ":"▸ "):"  ")+e.name;b.title=e.path;b.disabled=busy;b.setAttribute("aria-current",String(source?.path===e.path));
    if(e.directory){b.onclick=()=>{if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);void refreshTree(true)}}}else{b.onclick=()=>void navigate(async()=>select(await call<Nav>("Select",e.path)))}
-   row.append(b);if(!e.directory&&source?.path===e.path){row.classList.add("selected");const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.title="当前文件操作";more.setAttribute("aria-label","当前文件操作");more.disabled=busy;more.onclick=()=>openFileMenu(more);b.oncontextmenu=ev=>{ev.preventDefault();if(!busy)openFileMenu(more)};row.append(more)}container.append(row);
+   row.append(b);if(!e.directory){const mark=ojStatus.mark(e.path);if(mark){const tag=node("span",mark,"muted note");tag.title="远程评测缓存；AC 表示曾通过，不代表当前源码";row.append(tag)}}if(!e.directory&&source?.path===e.path){row.classList.add("selected");const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.title="当前文件操作";more.setAttribute("aria-label","当前文件操作");more.disabled=busy;more.onclick=()=>openFileMenu(more);b.oncontextmenu=ev=>{ev.preventDefault();if(!busy)openFileMenu(more)};row.append(more)}container.append(row);
    if(e.directory&&expanded.has(e.path)){const child=node("div","","branch");container.append(child);branch(e.path,child,depth+1)}
   }
  }
@@ -112,7 +113,7 @@ async function refreshTree(force=false){
    for(const e of list){if(!e.directory)present.add(e.path);else if(expanded.has(e.path))queue.push(e.path)}
   }
   for(const [dir,entries] of next){const old=treeEntries.get(dir)??[];for(const e of old){if(!e.directory&&!present.has(e.path)){seenMissing.add(e.path);await call("Invalidate",e.path);if(epoch!==navEpoch)return}}}
-  const changed=JSON.stringify([...next])!==JSON.stringify([...treeEntries]);treeEntries=next;if(changed||force)drawTree();
+  const changed=JSON.stringify([...next])!==JSON.stringify([...treeEntries]);treeEntries=next;if(changed||force)drawTree();if(changed&&!busy)void ojStatus.refreshLocal();
   el("treeNotice").textContent=queue.length?"展开目录过多，最多刷新 128 个目录。":"";el("treeNotice").hidden=!el("treeNotice").textContent;
   if(source&&!busy){
    const selectedPath=source.path;const exists=await call<boolean>("CheckSelected");
@@ -209,7 +210,7 @@ btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("Cho
 btn("refreshTree").onclick=()=>void refreshTree(true);
 btn("ojImport").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void navigate(async()=>{const r=await ojImport.run(source?.path??"");if(!r)return;await select(r.nav);status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"")})};
 btn("ojOpenOriginal").onclick=async()=>{const path=source?.path;if(!path||busy)return;try{await call("OJOpenOriginal",path)}catch(e){status.textContent=String(e)}};
-btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await ojImport.refresh(path);status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
+btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await ojImport.refresh(path);await ojStatus.refreshLocal();status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 btn("new").onclick=()=>void navigate(async()=>{
  if(!root)return;const name=await dialogs.name("新建文件","文件名（C 默认引入 Exam Kit，C++ 为普通模板）","A.c","新建");if(!name)return;
  const dir=source?.directory??root;await select(await call<Nav>("Create",dir,name))
@@ -235,7 +236,8 @@ function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.e
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
 const ojAccount=installOJAccount(call,config);
 const ojImport=installOJImport<Nav>(call);
-const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message});
+const ojStatus=installOJStatus(call,()=>[...treeEntries.values()].flat().filter(e=>!e.directory).map(e=>e.path),()=>source?.path??"",drawTree,message=>{status.textContent=message;if(preview.open&&message.startsWith("提交 #"))el("ojSubmitNotice").textContent=message},()=>!busy&&!config.open);
+const ojSubmit=installOJSubmit(call,preview,message=>{status.textContent=message},ojStatus.poll);
 const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
 btn("openEditor").onclick=async()=>{try{await call("OpenEditor",editorPath.trim());status.textContent="已请求打开编辑器"}catch(e){status.textContent=String(e)}};
 btn("reveal").onclick=async()=>{try{await call("Reveal")}catch(e){status.textContent=String(e)}};
@@ -244,9 +246,12 @@ btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};
 function showKit(k:KitStatus){el("kitStatus").textContent=k.error?"资源不可用："+k.error:"Exam Kit "+k.version+" · "+k.path}
-btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;el<HTMLInputElement>("editorPath").value=editorPath;config.showModal();ojAccount.open();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
+btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;el<HTMLInputElement>("editorPath").value=editorPath;config.showModal();ojStatus.clear();ojAccount.open();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
 btn("closeConfig").onclick=()=>config.close();
-config.addEventListener("close",()=>{void ojImport.refresh(source?.path??"")});
+config.addEventListener("close",()=>{void ojImport.refresh(source?.path??"").then(()=>ojStatus.refreshLocal()).then(updateControls)});
+async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true;updateControls();try{await ojStatus.refresh(paths)}finally{busy=false;updateControls()}}
+btn("ojRefreshTree").onclick=()=>{el<HTMLDetailsElement>("folderMenu").open=false;void refreshOJ([...treeEntries.values()].flat().filter(e=>!e.directory).map(e=>e.path))};
+btn("ojRefreshCurrent").onclick=()=>{if(source)void refreshOJ([source.path])};
 btn("saveConfig").onclick=async()=>{compilerByLanguage.c=el<HTMLInputElement>("cc").value.trim();compilerByLanguage.cpp=el<HTMLInputElement>("cxx").value.trim();editorPath=el<HTMLInputElement>("editorPath").value.trim();if(source)compiler.value=compilerByLanguage[language(source)];markStale();await storeConfig();config.close()};
 compiler.onchange=()=>void storeConfig();
 btn("reload").onclick=()=>void navigate(async()=>{markStale();if(source&&seenMissing.has(source.path))await call("Invalidate",source.path);await reload();if(source&&seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，是否继续使用旧样例？")){loaded=false;return}seenMissing.delete(source.path)}await showOrphans()});

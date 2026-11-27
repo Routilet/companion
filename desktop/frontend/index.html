@@ -4,12 +4,12 @@
 <header class="appbar"><img class="brand-icon" src="./icons/companion.svg" alt="" width="22" height="22"><strong>Companion</strong><span class="spacer"></span><button id="open" disabled>打开文件</button><button id="openFolder" disabled>打开文件夹</button><button id="manualBtn" disabled>函数手册</button><button id="settings">设置</button></header>
 <div class="shell" id="shell">
 <aside class="sidebar" aria-label="文件树">
- <div class="sidehead"><strong id="folder" title="">未打开文件夹</strong><button id="new" class="quiet iconbutton" aria-label="新建文件" title="新建文件" disabled>＋</button><details class="menu" id="folderMenu"><summary aria-label="文件夹操作" title="文件夹操作">⋯</summary><div class="menuitems"><button id="refreshTree" disabled>刷新文件树</button><button id="ojImport" hidden disabled>导入 OJ 题目</button></div></details></div>
+ <div class="sidehead"><strong id="folder" title="">未打开文件夹</strong><button id="new" class="quiet iconbutton" aria-label="新建文件" title="新建文件" disabled>＋</button><details class="menu" id="folderMenu"><summary aria-label="文件夹操作" title="文件夹操作">⋯</summary><div class="menuitems"><button id="refreshTree" disabled>刷新文件树</button><button id="ojImport" hidden disabled>导入 OJ 题目</button><button id="ojRefreshTree" hidden disabled>刷新在线评测</button></div></details></div>
  <div id="file" class="tree" tabindex="0" aria-label="源文件列表"></div><p id="treeNotice" class="muted note" role="status" hidden></p>
 </aside>
 <div id="sidebarGrip" role="separator" aria-label="调整文件树宽度" aria-orientation="vertical" aria-valuemin="150" aria-valuemax="420" aria-valuenow="220" tabindex="0"></div>
 <main id="workspace">
- <div class="filehead"><div class="filetitle"><h1 id="title">打开你的代码</h1><p id="path" class="muted" title="">选择或拖入普通 C/C++ 文件、文件夹，无需初始化。</p><div id="ojBinding" hidden><p id="ojBindingTitle" class="muted note"></p><div class="actions"><button id="ojOpenOriginal" class="quiet" type="button">打开原题 ↗</button><button id="ojUnbind" class="quiet" type="button">解除关联</button></div></div><p id="ojBindingError" class="muted note" hidden></p></div>
+ <div class="filehead"><div class="filetitle"><h1 id="title">打开你的代码</h1><p id="path" class="muted" title="">选择或拖入普通 C/C++ 文件、文件夹，无需初始化。</p><div id="ojBinding" hidden><p id="ojBindingTitle" class="muted note"></p><div class="actions"><button id="ojOpenOriginal" class="quiet" type="button">打开原题 ↗</button><button id="ojUnbind" class="quiet" type="button">解除关联</button></div><div id="ojJudgeInfo" hidden><p id="ojJudgeText" class="muted note" role="status"></p><button id="ojRefreshCurrent" class="quiet" type="button">刷新本题评测</button><p class="muted note">曾 AC 不代表当前源码正确。</p></div></div><p id="ojBindingError" class="muted note" hidden></p></div>
  <div id="fileActions" class="fileactions" hidden><button id="openEditor">打开编辑器</button><button id="copy">复制提交源码</button></div></div>
  <div id="work" hidden>
   <div id="orphans"></div>

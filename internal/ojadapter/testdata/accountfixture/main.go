@@ -24,7 +24,15 @@ func main() {
 		resp := map[string]any{"id": r.ID}
 		switch r.Method {
 		case "capabilities":
-			resp["result"] = map[string]any{"protocol": "routilet-oj-adapter/1", "adapter": "accoding", "version": "test", "methods": []string{"capabilities", "account", "login", "logout", "import", "prepare", "submit", "reconcile"}}
+			resp["result"] = map[string]any{"protocol": "routilet-oj-adapter/1", "adapter": "accoding", "version": "test", "methods": []string{"capabilities", "account", "login", "logout", "import", "prepare", "submit", "reconcile", "result", "status"}}
+		case "result", "status":
+			id := "124"
+			result := "WA"
+			if r.Method == "result" {
+				id, _ = r.Params["id"].(string)
+				result = "AC"
+			}
+			resp["result"] = map[string]any{"accountId": user, "target": r.Params["target"], "accepted": true, "latest": map[string]string{"id": id, "result": result, "language": "C99"}}
 		case "reconcile":
 			resp["result"] = map[string]string{"state": "unresolved"}
 		case "prepare":

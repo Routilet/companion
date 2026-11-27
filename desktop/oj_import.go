@@ -16,6 +16,7 @@ type ojAccountService interface {
  PrepareOnline(context.Context,ojadapter.Target,string)(ojadapter.SubmitPlan,error)
  SubmitOnline(context.Context,ojadapter.SubmitPlan,string,string)(ojadapter.Receipt,error)
  ReconcileOnline(context.Context,string)(ojadapter.Reconciliation,error)
+ Judge(context.Context,ojadapter.Target,string)(ojadapter.JudgeStatus,error)
  Login(context.Context,string,string,bool)(ojadapter.AccountView,error)
  Restore(context.Context)(ojadapter.AccountView,error)
  Refresh(context.Context)(ojadapter.AccountView,error)

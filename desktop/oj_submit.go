@@ -98,7 +98,9 @@ func (d *Desktop) OJSendSubmission(compiler, digest, token, language string) (oj
 	code := p.Text
 	d.mu.Unlock()
 	// Send only the exact preview bytes, never reread from the UI or regenerate after confirmation.
-	return d.accounts.SubmitOnline(context.Background(), pending.plan, language, code)
+	r,e:=d.accounts.SubmitOnline(context.Background(), pending.plan, language, code)
+ if e==nil{d.rememberReceipt(r)}
+ return r,e
 }
 
 func (d *Desktop) OJReconcileSubmission(compiler, digest string) (ojadapter.Reconciliation, error) {

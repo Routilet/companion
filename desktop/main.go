@@ -23,6 +23,8 @@ type Desktop struct{
  accounts ojAccountService
  ojPending *ojPending
  ojSubmit *ojSubmissionPending
+ ojJudges map[judgeKey]judgeView
+ ojReceipt *ojadapter.Receipt
  ojSequence uint64
  native *application.App
  mu sync.Mutex

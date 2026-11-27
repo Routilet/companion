@@ -119,7 +119,7 @@ func TestRealAdapter(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
-	if c := s.Capabilities(); len(c.Methods) != 9 || c.Methods[0] != "capabilities" {
+	if c := s.Capabilities(); len(c.Methods) != 11 || c.Methods[0] != "capabilities" {
 		t.Fatal(c)
 	}
 	var link struct {
