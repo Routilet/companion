@@ -17,6 +17,26 @@ concurrency:
   group: companion-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build actual frontend
+        working-directory: desktop/frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Browser regression without native JavaScript dialogs
+        run: |
+          npm install --prefix out/ui-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          node out/ui-test/node_modules/playwright/cli.js install --with-deps chromium
+          node --test tests/browser.test.mjs
   build:
     strategy:
       fail-fast: false
@@ -197,9 +217,9 @@ jobs:
             codesign --verify --strict out/install/node_modules/@routilet/companion/bin/darwin-arm64/Companion.app
           fi
   publish:
-    needs: [package, installed]
-    # One explicitly approved first beta. Other versions require manual dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.1'))
+    needs: [package, installed, frontend]
+    # Only explicitly approved beta.2. Other versions require manual dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && needs.package.outputs.version == '0.1.0-beta.2'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -221,12 +241,12 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.1 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0-beta.2 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
             code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in
-              200) echo "Approved beta already published; no tag changes."; exit 0 ;;
+              200) echo "Approved beta.2 already published; no tag changes."; exit 0 ;;
               404) ;;
               *) echo "Registry lookup failed: HTTP $code"; exit 1 ;;
             esac
