@@ -123,7 +123,7 @@ func TestRealAdapter(t *testing.T) {
  methods:=map[string]bool{}
  for _,m:=range caps.Methods{methods[m]=true}
  for _,m:=range []string{"capabilities","account","login","logout","resolve","import","prepare","submit","reconcile","result","status","import_document","contests","status_detail","result_detail","contest_status"}{if !methods[m]{t.Fatal("missing",m,caps)}}
- if caps.Version!="0.1.0-beta.2"{t.Fatal(caps)}
+ if caps.Version!="0.1.0"{t.Fatalf("adapter version: got %q, want 0.1.0",caps.Version)}
  for _,q:=range []struct{method string;params any}{
  {"import_document",map[string]string{"url":"https://accoding.buaa.edu.cn/problem/42/index"}},
  {"contests",struct{}{}},
