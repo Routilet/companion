@@ -198,8 +198,8 @@ function comparison(c:CaseResult){
 function renderResult(){
  result.hidden=false;const wrap=el("results"),diag=el("diagnostics");wrap.replaceChildren();diag.replaceChildren();
  el("diagnosticsSection").hidden=true;btn("rawToggle").hidden=true;el("batchSummary").textContent="";
- const current=cases[selected];const candidate=caseResult(selected);const tableMode=!!(last&&candidate&&candidate.difference&&candidate.expected!==null&&!last.stale&&matches(candidate,selected)&&!editingExpected);el("outputLayout").classList.toggle("comparison-mode",tableMode||!current);el("expectedEditor").hidden=!current||tableMode;btn("editExpected").hidden=!tableMode;stale.hidden=true;
- if(!last){el("runDetails").hidden=true;el("resultTitle").textContent="实际输出";el("resultTitle").className="";el("resultMeta").textContent="";wrap.append(node("p","尚未运行","muted"));return}el("runDetails").hidden=false;const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
+ const current=cases[selected];const candidate=caseResult(selected);const tableMode=!!(last&&candidate&&candidate.difference&&candidate.expected!==null&&!last.stale&&matches(candidate,selected)&&!editingExpected);el("outputLayout").classList.toggle("comparison-mode",tableMode||!current);el("outputHeading").textContent=tableMode?"输出对比":"实际输出";el("expectedEditor").hidden=!current||tableMode;btn("editExpected").hidden=!tableMode;stale.hidden=true;
+ if(!last){el("runDetails").hidden=true;el("resultTitle").textContent="";el("resultTitle").className="";el("resultMeta").textContent="";wrap.append(node("p","尚未运行","muted"));return}el("runDetails").hidden=false;const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
  stale.hidden=!r.stale&&!past;
  el("meta").textContent=r.compiler+(r.kitVersion?" · Exam Kit "+r.kitVersion+" · "+(r.components?.length??0)+" 个组件":"");
  const compared=r.cases.filter(c=>c.expected!==null),passed=compared.filter(c=>c.state==="passed").length;
