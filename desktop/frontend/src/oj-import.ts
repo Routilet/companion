@@ -8,10 +8,13 @@ const btn=(id:string)=>el<HTMLButtonElement>(id);
 function modal(dialog:HTMLDialogElement):Promise<boolean>{return new Promise(resolve=>{dialog.returnValue="";dialog.addEventListener("close",()=>resolve(dialog.returnValue==="confirm"),{once:true});dialog.showModal()})}
 export function installOJImport<T>(call:Call){
  const dialog=el<HTMLDialogElement>("ojImportDialog"),preview=el<HTMLDialogElement>("ojImportPreview");
+ let epoch=0;
  async function refresh(path:string){
-  const binding=el("ojBinding");binding.hidden=true;el("ojBindingError").hidden=true;
-  try{const a=await call<{available:boolean}>("OJAccountStatus");btn("ojImport").hidden=!a.available}catch{btn("ojImport").hidden=true}
-  if(!path)return;try{const b=await call<Binding|null>("OJBinding");if(!b)return;el("ojBindingTitle").textContent=`Accoding · ${b.label} · ${b.title}`;btn("ojOpenOriginal").textContent=b.target.kind==="contest"?"打开原比赛 ↗":"打开原题 ↗";binding.hidden=false}catch{el("ojBindingError").textContent="题目关联无法读取，原文件保留。";el("ojBindingError").hidden=false}
+  const n=++epoch,binding=el("ojBinding");binding.hidden=true;el("ojBindingError").hidden=true;
+  let available=false;try{available=(await call<{available:boolean}>("OJAccountStatus")).available}catch{/* unavailable */}
+  if(n!==epoch)return false;btn("ojImport").hidden=!available;btn("ojRefreshTree").hidden=!available;
+  if(!available||!path)return available;try{const b=await call<Binding|null>("OJBinding");if(n!==epoch||!b)return available;el("ojBindingTitle").textContent=`Accoding · ${b.label} · ${b.title}`;btn("ojOpenOriginal").textContent=b.target.kind==="contest"?"打开原比赛 ↗":"打开原题 ↗";binding.hidden=false}catch{if(n===epoch){el("ojBindingError").textContent="题目关联无法读取，原文件保留。";el("ojBindingError").hidden=false}}
+  return available;
  }
  async function run(path:string):Promise<Apply<T>|null>{
   const a=await call<{available:boolean;state:string}>("OJAccountStatus");if(!a.available)throw Error("Accoding Adapter 不可用");if(a.state!=="signed_in"&&a.state!=="unverified")throw Error("请先在设置中登录 Accoding");

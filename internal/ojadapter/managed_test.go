@@ -47,6 +47,14 @@ func TestRealManagedAdapter(t *testing.T){
  a:=NewManagedAccounts(manager,"");a.store=&memoryStore{};defer a.Close()
  if a.Status().Available||a.session!=nil{t.Fatal("unexpected startup process")}
  if v:=a.CheckAvailability(context.Background());!v.Available||a.session!=nil{t.Fatal(v)}
+ disabled:=filepath.Join(base,"disabled.json")
+ if e=os.WriteFile(disabled,[]byte("true"),0600);e!=nil{t.Fatal(e)}
+ if v:=a.CheckAvailability(context.Background());v.Available||!strings.Contains(v.UnavailableReason,"已禁用"){t.Fatal(v)}
+ if e=os.Remove(disabled);e!=nil{t.Fatal(e)}
+ if e=os.WriteFile(filepath.Join(pkg,name),[]byte("tampered"),0700);e!=nil{t.Fatal(e)}
+ if v:=a.CheckAvailability(context.Background());v.Available||!strings.Contains(v.UnavailableReason,"SHA256"){t.Fatal(v)}
+ if e=os.WriteFile(filepath.Join(pkg,name),raw,0700);e!=nil{t.Fatal(e)}
+ if v:=a.CheckAvailability(context.Background());!v.Available{t.Fatal(v)}
  if e=a.ensure(context.Background());e!=nil{t.Fatal(e)}
  var state AccountState
  if e=a.session.Call(context.Background(),"account",map[string]bool{"refresh":false},&state);e!=nil||state.State!="signed_out"{t.Fatal(state,e)}
@@ -57,5 +65,5 @@ func TestRealManagedAdapter(t *testing.T){
  if e=a.session.Call(context.Background(),"account",map[string]bool{"refresh":false},&state);e!=nil{t.Fatal(e)}
  if _,e=a.Logout();e!=nil{t.Fatal(e)}
  if entries,e:=os.ReadDir(runs);e!=nil||len(entries)!=0{t.Fatal("normal EOF left a marker",entries,e)}
- if a.CheckAvailability(context.Background()).Available{t.Fatal("removed activation still available")}
+ if v:=a.CheckAvailability(context.Background());v.Available||!strings.Contains(v.UnavailableReason,"未安装"){t.Fatal(v)}
 }
