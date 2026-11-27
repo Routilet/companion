@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-// AccountPreviewEnv is a development-only trusted executable override. The
-// installer integration must supply a verified leased path before release.
+// AccountPreviewEnv is a development-only trusted executable override;
+// a provided Routilet manager always takes precedence.
 const AccountPreviewEnv = "COMPANION_ACCODING_ADAPTER_PREVIEW"
 
 type AccountState struct {
@@ -20,6 +20,7 @@ type AccountState struct {
 type AccountView struct {
 	AccountState
 	Available   bool   `json:"available"`
+	UnavailableReason string `json:"unavailableReason,omitempty"`
 	CanRemember bool   `json:"canRemember"`
 	Saved       bool   `json:"saved"`
 	Warning     string `json:"warning,omitempty"`
@@ -43,6 +44,9 @@ var errCredentialStore = errors.New("system credential store unavailable")
 type Accounts struct {
 	mu         sync.Mutex
 	executable string
+	manager string
+	managedAvailable bool
+	unavailableReason string
 	store      credentialStore
 	session    *Session
 	state      AccountState
@@ -57,12 +61,37 @@ func NewAccounts(path string) *Accounts {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Accounts{executable: path, store: systemCredentialStore(), life: ctx, stop: cancel}
 }
+// NewManagedAccounts uses only the manager injected by Routilet. A preview
+// binary is accepted only when no manager was supplied, never as a fallback.
+func NewManagedAccounts(manager, preview string) *Accounts {
+ if manager=="" {return NewAccounts(preview)}
+ a:=NewAccounts("");a.manager=manager
+ a.unavailableReason="尚未检查 Routilet 中的 Adapter"
+ return a
+}
+
 func (a *Accounts) available() bool {
-	if !filepath.IsAbs(a.executable) {
+ if a.manager!="" {return a.managedAvailable||a.session!=nil}
+ if !filepath.IsAbs(a.executable) {
 		return false
 	}
 	f, e := os.Stat(a.executable)
 	return e == nil && f.Mode().IsRegular()
+}
+// checkAvailable runs an offline manager query only on explicit refresh or
+// login/restore. Status and periodic tree cache reads never spawn processes.
+func (a *Accounts) checkAvailable(ctx context.Context) bool {
+ if a.manager=="" {return a.available()}
+ err:=checkManaged(ctx,a.manager)
+ a.managedAvailable=err==nil
+ a.unavailableReason=""
+ if err!=nil {a.unavailableReason=err.Error()}
+ return a.managedAvailable
+}
+func (a *Accounts) CheckAvailability(ctx context.Context) AccountView {
+ a.mu.Lock();defer a.mu.Unlock()
+ if !a.closed {ctx,done:=a.context(ctx);defer done();a.checkAvailable(ctx)}
+ return a.view()
 }
 func (a *Accounts) reset() {
 	if a.session != nil {
@@ -88,7 +117,9 @@ func (a *Accounts) view() AccountView {
 	if state.State == "signed_in" && !a.verified {
 		state.State = "unverified"
 	}
-	return AccountView{AccountState: state, Available: !a.closed && a.available(), CanRemember: a.store.Supported(), Saved: a.saved}
+	v:=AccountView{AccountState: state, Available: !a.closed && a.available(), CanRemember: a.store.Supported(), Saved: a.saved}
+ if !v.Available {v.UnavailableReason=a.unavailableReason;if v.UnavailableReason==""{v.UnavailableReason="请通过 Routilet 安装并启用 Accoding Adapter；本地功能不受影响。"}}
+ return v
 }
 
 // Status deliberately does not open the system keychain (which can prompt) or start a process.
@@ -105,10 +136,13 @@ func (a *Accounts) ensure(ctx context.Context) error {
 			return nil
 		}
 	}
-	s, e := Start(ctx, a.executable, "accoding")
+	var s *Session
+ var e error
+ if a.manager!="" {s,e=startCommand(ctx,a.manager,"accoding",true,"--adapter-stdio","accoding-adapter")}else{s,e=Start(ctx,a.executable,"accoding")}
 	if e != nil {
-		return errors.New("无法启动 Accoding Adapter")
-	}
+  if a.manager!=""{a.managedAvailable=false;a.unavailableReason="无法启动已安装的 Adapter，请在 Routilet 检查安装或更新"}
+  return errors.New("无法启动 Accoding Adapter")
+ }
 	caps := s.Capabilities()
 	m := map[string]bool{}
 	for _, k := range caps.Methods {
@@ -165,9 +199,9 @@ func (a *Accounts) login(ctx context.Context, c credentials, remember bool) (Acc
 	if c.Username == "" || c.Password == "" || len(c.Username) > 1024 || len(c.Password) > 4096 {
 		return a.view(), errors.New("请输入有效账号和密码")
 	}
-	if a.closed || !a.available() {
-		return a.view(), errors.New("Accoding Adapter 不可用")
-	}
+	if a.closed || !a.checkAvailable(ctx) {
+  return a.view(), errors.New("Accoding Adapter 不可用，请在 Routilet 检查安装与启用状态")
+ }
 	if remember && !a.store.Supported() {
 		return a.view(), errCredentialStore
 	}
@@ -211,9 +245,9 @@ func (a *Accounts) Restore(ctx context.Context) (AccountView, error) {
 	defer a.mu.Unlock()
 	ctx, done := a.context(ctx)
 	defer done()
-	if a.closed || !a.available() {
-		return a.view(), errors.New("Accoding Adapter 不可用")
-	}
+	if a.closed || !a.checkAvailable(ctx) {
+  return a.view(), errors.New("Accoding Adapter 不可用，请在 Routilet 检查安装与启用状态")
+ }
 	if !a.store.Supported() {
 		return a.view(), errCredentialStore
 	}

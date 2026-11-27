@@ -58,22 +58,26 @@ type Session struct {
 	reader  *bufio.Reader
 	gate    chan struct{}
 	done    chan struct{}
+	closing chan struct{}
+	managed bool
 	stop    sync.Once
 	next    uint64 // accessed under gate
 	caps    Capabilities
 }
 
-// Start accepts a trusted, already resolved absolute executable path. The
-// caller must obtain it from verified installation metadata in a later phase.
-// No searching PATH, downloading, invoking a shell, or auto-starting at boot.
+// Start is the explicit development-only direct binary path.
 func Start(ctx context.Context, executable, adapter string) (*Session, error) {
+	return startCommand(ctx, executable, adapter, false, "--stdio")
+}
+
+func startCommand(ctx context.Context, executable, adapter string, managed bool, args ...string) (*Session, error) {
 	if !filepath.IsAbs(executable) || adapter == "" {
 		return nil, errors.New("adapter requires a trusted absolute executable path and ID")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(executable, "--stdio")
+	cmd := exec.Command(executable, args...)
 	cmd.Dir = filepath.Dir(executable)
 	configure(cmd)
 	stdinR, stdinW, err := os.Pipe()
@@ -100,7 +104,7 @@ func Start(ctx context.Context, executable, adapter string) (*Session, error) {
 	}
 	stdinR.Close()
 	stdoutW.Close()
-	s := &Session{cmd: cmd, in: stdinW, out: stdoutR, reader: bufio.NewReaderSize(stdoutR, 64<<10), gate: make(chan struct{}, 1), done: make(chan struct{})}
+	s := &Session{cmd: cmd, in: stdinW, out: stdoutR, reader: bufio.NewReaderSize(stdoutR, 64<<10), gate: make(chan struct{}, 1), done: make(chan struct{}), closing: make(chan struct{}), managed: managed}
 	go func() { _ = cmd.Wait(); close(s.done) }()
 	hctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
@@ -135,10 +139,23 @@ func (s *Session) Capabilities() Capabilities {
 	return c
 }
 
-// Close is idempotent and may run concurrently with Call. Closing the pipes
-// also releases blocked reads/writes. Wait reaps the child before returning.
+// Close sends EOF before waiting. Managed sessions must let Routilet reap
+// its child and remove the lease marker. On timeout kill only the owned
+// process; the manager's conservative marker may remain.
 func (s *Session) Close() {
-	s.stop.Do(func() { _ = s.cmd.Process.Kill(); _ = s.in.Close(); _ = s.out.Close(); <-s.done })
+ s.stop.Do(func() {
+  close(s.closing)
+  _ = s.in.Close()
+  // Close the read end to unblock concurrent calls and prevent a late reply
+  // filling a pipe while we wait. No further messages are accepted.
+  _ = s.out.Close()
+  grace:=500*time.Millisecond
+  if s.managed { grace=3*time.Second }
+  timer:=time.NewTimer(grace);defer timer.Stop()
+  select {case <-s.done:return;case <-timer.C:}
+  _ = s.cmd.Process.Kill()
+  <-s.done
+ })
 }
 
 func (s *Session) Call(ctx context.Context, method string, params any, out any) error {
@@ -149,6 +166,8 @@ func (s *Session) Call(ctx context.Context, method string, params any, out any) 
 		return ctx.Err()
 	case <-s.done:
 		return ErrClosed
+	case <-s.closing:
+		return ErrClosed
 	case s.gate <- struct{}{}:
 	}
 	defer func() { <-s.gate }()
@@ -157,6 +176,8 @@ func (s *Session) Call(ctx context.Context, method string, params any, out any) 
 	}
 	select {
 	case <-s.done:
+		return ErrClosed
+	case <-s.closing:
 		return ErrClosed
 	default:
 	}

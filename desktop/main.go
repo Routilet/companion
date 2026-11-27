@@ -112,6 +112,7 @@ func(d *Desktop) Observe(compiler,revision string,selection int)error{
 }
 func(d *Desktop) ObservationState()string{d.mu.Lock();defer d.mu.Unlock();return d.observerState}
 func(d *Desktop) OJAccountStatus() ojadapter.AccountView { return d.accounts.Status() }
+func(d *Desktop) OJCheckAdapter() ojadapter.AccountView { if a,ok:=d.accounts.(interface{CheckAvailability(context.Context) ojadapter.AccountView});ok{return a.CheckAvailability(context.Background())};return d.accounts.Status() }
 func(d *Desktop) OJLogin(username,password string,remember bool)(ojadapter.AccountView,error){return d.accounts.Login(context.Background(),username,password,remember)}
 func(d *Desktop) OJRestore()(ojadapter.AccountView,error){return d.accounts.Restore(context.Background())}
 func(d *Desktop) OJRefresh()(ojadapter.AccountView,error){return d.accounts.Refresh(context.Background())}
@@ -320,7 +321,7 @@ func main(){
  if len(os.Args)==2&&os.Args[1]=="--version"{fmt.Println(buildVersion);return}
  if len(os.Args)==2&&os.Args[1]=="--check-install"{p,e:=localrun.ResolveInstalledKit();if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};k,e:=localrun.LoadKitPackage(p);if e!=nil{fmt.Fprintln(os.Stderr,e);os.Exit(1)};fmt.Println("companion "+buildVersion+" exam-kit "+k.Version);return}
  kit,e:=localrun.ResolveInstalledKit()
- d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewAccounts(os.Getenv(ojadapter.AccountPreviewEnv))}
+ d:=&Desktop{kitPackage:kit,managerPath:os.Getenv(localrun.RoutiletExecutableEnv),accounts:ojadapter.NewManagedAccounts(os.Getenv(localrun.RoutiletExecutableEnv),os.Getenv(ojadapter.AccountPreviewEnv))}
  if e!=nil{d.kitError=e.Error()}
  if kit==""&&os.Getenv(localrun.KitPreviewEnv)!=""{d.kitPackage=os.Getenv(localrun.KitPreviewEnv);d.kitError=""}
  if path,e:=localrun.SettingsPath();e==nil{d.settingsPath=path;if s,e:=localrun.LoadSettings(path);e==nil{d.settings=s}else{d.settingsError=e.Error()}}else{d.settingsError=e.Error()}

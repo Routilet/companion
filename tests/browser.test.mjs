@@ -32,7 +32,7 @@ async function setup(t){
   window.bridge=async(method,...args)=>{
    state.calls.push([method,...args]);
    switch(method){
-   case 'OJAccountStatus':return {available:state.ojAvailable??false,state:state.ojAvailable?'signed_in':'unavailable'};
+   case 'OJCheckAdapter':case 'OJAccountStatus':return {available:state.ojAvailable??false,state:state.ojAvailable?'signed_in':'unavailable'};
    case 'OJBinding':return state.name==='A.c'?(state.ojBinding??null):null;
    case 'OJCachedJudges':return state.ojJudges??{};
    case 'OJRefreshJudges':return 1;
