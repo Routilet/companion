@@ -58,3 +58,16 @@ func TestOJAttachExistingAndAccountChange(t *testing.T){
  res,e:=d.OJApplyImport(preview.Token);if e!=nil||len(res.Completed)!=1||len(res.Failed)!=0{t.Fatal(res,e)}
  after,e:=localrun.LoadCases(s.Path);if e!=nil||after.Revision!=cs.Revision{t.Fatal(after,e)}
 }
+
+func TestIntegratedCreateLocationAndBindingGuard(t *testing.T){
+ d,_:=importDesktop(t)
+ oldRoot:=d.root
+ other,e:=localrun.OpenDirectory(t.TempDir());if e!=nil{t.Fatal(e)}
+ old:=filepath.Join(other,"old.cpp")
+ if e=ojadapter.SaveBinding(old,importProblem("5","A").Binding());e!=nil{t.Fatal(e)}
+ if _,e=d.Create(other,"old.cpp");e==nil{t.Fatal("old binding was reused")}
+ if d.root!=oldRoot{t.Fatal("failed create changed root")}
+ if _,e=os.Stat(old);!os.IsNotExist(e){t.Fatal("failed create wrote source",e)}
+ nav,e:=d.Create(other,"fresh.cpp");if e!=nil{t.Fatal(e)}
+ if nav.Root!=other||nav.Source.Path!=filepath.Join(other,"fresh.cpp"){t.Fatal(nav)}
+}

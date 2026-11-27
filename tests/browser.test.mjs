@@ -33,10 +33,14 @@ async function setup(t){
    state.calls.push([method,...args]);
    switch(method){
    case 'OJAccountStatus':return {available:state.ojAvailable??false,state:state.ojAvailable?'signed_in':'unavailable'};
-   case 'OJBinding':return state.ojBinding??null;
+   case 'OJBinding':return state.name==='A.c'?(state.ojBinding??null):null;
    case 'OJCachedJudges':return state.ojJudges??{};
    case 'OJRefreshJudges':return 1;
-   case 'OJSubmissionAvailable':return false;
+   case 'OJUnbind':state.ojBinding=null;state.ojJudges={};return;
+   case 'OJSubmissionAvailable':return !!state.ojBinding;
+   case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
+   case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:['C']},title:'测试题',label:'A',nickname:'fixture'};
+   case 'OJSendSubmission':return {id:'12',result:'AC',accountId:'7',language:'C'};
    case 'Version':return '0.1.0-beta.2';
    case 'Config':return {c:'',cpp:'',editor:'',root,selected:'A.c'};
    case 'ConfigWarning':return '';
@@ -205,4 +209,23 @@ test('OJ cached state survives keyed tree refresh, explicit refresh is the only 
  await p.waitForFunction(()=>document.querySelectorAll('.tree-item').length===3);
  assert.equal(await p.evaluate(()=>window.originalTreeButton===document.querySelector('.tree-item')),true);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges').length),0);
+ await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.waitForFunction(()=>document.querySelector('#title').textContent==='B.c'&&!document.querySelector('#new').disabled);
+ await p.locator('.tree-item').filter({hasText:'A.c'}).click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden&&!document.querySelector('#new').disabled);
+ assert.match(await p.locator('#ojJudgeText').textContent(),/曾 AC.*WA/);
+ await p.locator('#ojRefreshCurrent').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshJudges'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges')), [['OJRefreshJudges',['/work/A.c']]]);
+ await p.waitForFunction(()=>!document.querySelector('#ojUnbind').disabled);
+ await p.locator('#ojUnbind').click();await p.locator('#actionAccept').click();await p.waitForFunction(()=>document.querySelector('#ojBinding').hidden&&!document.querySelector('.tree-judge:not([hidden])'));
+});
+
+test('online submission in unified preview requires explicit language and confirmation',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'problemset'}}});
+ await p.locator('#copy').click();await p.locator('#ojSubmitPrepare').waitFor();
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),0);
+ await p.locator('#ojSubmitPrepare').click();await p.locator('#ojSubmitConfirm').waitFor();
+ assert.equal(await p.locator('#ojSubmitConfirm').isDisabled(),true);
+ await p.locator('#ojSubmitLanguage').selectOption('C');await p.locator('#ojSubmitConfirm').click();
+ await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('#12'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission')), [['OJSendSubmission','','fixture-digest','fixture-token','C']]);
 });

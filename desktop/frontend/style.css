@@ -24,3 +24,5 @@ dialog{width:min(680px,90vw);max-height:85vh;border:1px solid var(--line);border
 @media(prefers-reduced-motion:no-preference){button,.tree-row,.manualLayout summary{transition:background-color 100ms ease,color 100ms ease,border-color 100ms ease}.tree-arrow{transition:transform 120ms ease}.tree-more{transition:opacity 100ms ease}dialog[open]{animation:dialog-in 140ms ease-out}.floating-menu:not([hidden]),.menu[open] .menuitems{animation:menu-in 100ms ease-out}@keyframes dialog-in{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}@keyframes menu-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}}
 
 .category-entry{display:block;width:100%;text-align:left;padding:8px 6px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent}.category-entry small{white-space:normal;margin-top:3px}.manualLayout nav button:focus-visible,.manualLayout nav summary:focus-visible{outline-offset:-2px}
+
+.tree-judge{flex:none;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}.tree-judge:not([hidden]){font-weight:600}

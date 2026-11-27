@@ -270,6 +270,7 @@ setInterval(async()=>{
 },1000);
 function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"Observer 不可用："+o.error:"Observer "+o.version+" · "+o.backend}
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
+// Only traverse currently expanded branches; cached collapsed directories are not online refresh targets.
 function visibleSourcePaths(){const out:string[]=[];function visit(dir:string,depth:number){if(depth>24)return;for(const e of treeEntries.get(dir)??[]){if(!e.directory)out.push(e.path);else if(expanded.has(e.path))visit(e.path,depth+1)}}if(root)visit(root,0);return out}
 const ojAccount=installOJAccount(call,config);
 const ojImport=installOJImport<Nav>(call);
