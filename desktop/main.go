@@ -277,6 +277,7 @@ func main(){
   Mac:application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed:true},
   OnShutdown:d.shutdown,
  })
+ if icon,e:=assets.ReadFile("frontend/dist/icons/companion.png");e==nil{app.SetIcon(icon)}
  d.native=app
  win:=app.Window.NewWithOptions(application.WebviewWindowOptions{Title:"Companion",Width:1000,Height:700,URL:"/",EnableFileDrop:true})
  win.OnWindowEvent(events.Common.WindowFilesDropped,func(e *application.WindowEvent){if ctx:=e.Context();ctx!=nil{d.mu.Lock();d.drop=append([]string(nil),ctx.DroppedFiles()...);d.mu.Unlock()}})

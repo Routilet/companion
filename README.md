@@ -1,5 +1,7 @@
 # Companion
 
+![Companion](desktop/frontend/icons/companion.svg)
+
 Routilet 的文件优先本地 C/C++ 编程辅助工具。普通源文件和文件夹无需初始化；外部编辑器写代码，Companion 管理测试样例、本地编译运行、版本化 Exam Kit 资源、函数手册及独立提交源码。可选 Observer 独立运行观察。无 OJ 插件，无运行时 AI 或 Node.js 依赖。
 
 ## 状态

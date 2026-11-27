@@ -73,6 +73,7 @@ jobs:
           set -euo pipefail
           npm install --prefix out/icon-tools --no-save --ignore-scripts --no-audit --no-fund @resvg/resvg-js@2.6.2
           node scripts/generate-icons.cjs
+          test -s desktop/frontend/dist/icons/companion.png
           if [[ "$TARGET" == win32-x64 ]]; then
             go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -ico out/icons/Companion.ico -o desktop/companion_windows_amd64.syso
           else
@@ -162,12 +163,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --prefix out/ci-pnpm --no-save --ignore-scripts --no-audit --no-fund pnpm@12.22.0
-          mkdir -p out/install
-          printf '{"name":"companion-install-check","private":true}\n' > out/install/package.json
-          archive="$(pwd)/$(find release -name '*.tgz' -print -quit)"
-          node out/ci-pnpm/node_modules/pnpm/bin/pnpm.cjs --dir out/install add "$archive" --ignore-scripts --registry=https://registry.npmjs.org/
+          mkdir -p out/ci-pnpm/extracted
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            archive=pnpm-win32-x64.zip
+            digest=0a9c1bc147202089b12d91f43349f6f9ae26df191ee704dee313ba3f9a0a8ffe
+          else
+            archive=pnpm-darwin-arm64.tar.gz
+            digest=af43c44f22ef89191d83163c3ef9f5ee021a7368f401c95d92731be7d6b21cc5
+          fi
+          curl --fail --location --retry 3 "https://github.com/pnpm/pnpm/releases/download/v12.22.0/$archive" -o "out/ci-pnpm/$archive"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            printf '%s  %s\n' "$digest" "out/ci-pnpm/$archive" | sha256sum -c -
+            unzip -q "out/ci-pnpm/$archive" -d out/ci-pnpm/extracted
+            bin="$(find out/ci-pnpm/extracted -type f -iname 'pnpm*.exe' | head -n1)"
+            test -n "$bin"
+            cp "$bin" out/ci-pnpm/pnpm.exe
+          else
+            printf '%s  %s\n' "$digest" "out/ci-pnpm/$archive" | shasum -a 256 -c -
+            tar -xzf "out/ci-pnpm/$archive" -C out/ci-pnpm/extracted
+            bin="$(find out/ci-pnpm/extracted -type f \( -name pnpm -o -name pnpm-darwin-arm64 \) | head -n1)"
+            test -n "$bin"
+            cp "$bin" out/ci-pnpm/pnpm
+            chmod +x out/ci-pnpm/pnpm
+          fi
+          node scripts/install-candidate.mjs
           node scripts/verify-package.mjs out/install/node_modules/@routilet/companion
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            codesign --verify --strict out/install/node_modules/@routilet/companion/bin/darwin-arm64/Companion.app
+          fi
   publish:
     needs: [package, installed]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish

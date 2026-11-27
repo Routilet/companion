@@ -10,6 +10,8 @@ function png(size){
  return cache.get(size);
 }
 fs.writeFileSync('out/icons/companion.png',png(256));
+fs.mkdirSync('desktop/frontend/dist/icons',{recursive:true});
+fs.writeFileSync('desktop/frontend/dist/icons/companion.png',png(256));
 const sizes=[16,24,32,48,64,128,256];
 const header=Buffer.alloc(6+16*sizes.length);header.writeUInt16LE(1,2);header.writeUInt16LE(sizes.length,4);
 let offset=header.length;const images=[];
