@@ -1,0 +1,12 @@
+import {createHash} from 'node:crypto';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+const dir=process.argv[2];
+if(!dir)throw Error('fixture directory required');
+await mkdir(dir,{recursive:true});
+const response=await fetch('https://github.com/Routilet/c-observer/releases/download/v0.2.0/routilet-c-observer-0.2.0.tgz');
+if(!response.ok)throw Error('Observer release download failed '+response.status);
+const bytes=Buffer.from(await response.arrayBuffer());
+if(createHash('sha256').update(bytes).digest('hex')!=='ca4f7f77def4a6f4ba47581f6b835f9bf29f383e248c436843737dcced84c71f')throw Error('Observer release digest mismatch');
+await writeFile(dir+'/observer.tgz',bytes);
+execFileSync('tar',['-xzf',dir+'/observer.tgz','-C',dir],{stdio:'inherit'});

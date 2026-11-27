@@ -1,0 +1,1 @@
+{"name":"companion-next-desktop","private":true,"type":"module","scripts":{"build":"tsc -p tsconfig.json && node build.mjs"},"devDependencies":{"typescript":"5.9.3"}}
