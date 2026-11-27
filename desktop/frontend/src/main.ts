@@ -26,40 +26,53 @@ const dialogs=installDialogs();
 const input=el<HTMLTextAreaElement>("input"),expected=el<HTMLTextAreaElement>("expected"),compare=el<HTMLInputElement>("compare"),compiler=el<HTMLInputElement>("compiler");
 let root="",expanded=new Set<string>(),treeEntries=new Map<string,Entry[]>(),refreshing=false,navEpoch=0,seenMissing=new Set<string>();
 const compilerByLanguage:Record<string,string>={c:"",cpp:""};
-let observing=false,observerPolling=false;
+let observing=false,observerPolling=false,rawResult=false;
 let editorPath="",prepared:Submission|undefined,runningTest=false,dropCheck=false,progressCheck=false;
 const language=(s:Source)=>/\.c$/i.test(s.name)?"c":"cpp";
 const status=el("status"),result=el("result"),stale=el("stale");
+const noticeObserver=new MutationObserver(()=>{el("observerState").hidden=!el("observerState").textContent;status.hidden=!status.textContent});noticeObserver.observe(el("observerState"),{childList:true,characterData:true,subtree:true});noticeObserver.observe(status,{childList:true,characterData:true,subtree:true});
 const labels:Record<string,string>={completed:"测试完成",passed:"通过",mismatch:"输出不一致",ran:"已运行（无预期）",compilation_failed:"编译失败",runtime_failed:"运行失败",timeout:"超时",cancelled:"已取消",output_limit:"输出超限"};
 async function call<T>(method:string,...args:unknown[]):Promise<T>{
  if(!runtime)throw Error("未连接 Companion 本地后端");
  return await runtime.Call.ByName("main.Desktop."+method,...args) as T;
 }
-function markStale(){if(last)stale.hidden=false;}
+function markStale(){if(last&&!last.stale){last.stale=true;renderTabs();renderResult()}}
 function changes(){dirty=true;markStale();updateControls();}
 function updateControls(){
- btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("new").disabled=btn("refreshTree").disabled=busy||!root;btn("rename").disabled=btn("import").disabled=busy||!source||!loaded;
+ btn("open").disabled=btn("openFolder").disabled=btn("settings").disabled=busy||!runtime;btn("manualBtn").disabled=busy||!runtime;for(const id of ["openEditor","reveal","copy"])btn(id).disabled=busy||!source;btn("new").disabled=btn("refreshTree").disabled=busy||!root;btn("rename").disabled=busy||!source||!loaded;btn("import").disabled=busy||!source||!loaded;
  for(const id of ["add","save","reload","remove","run","all"])btn(id).disabled=busy||!source||(!loaded&&id!=="reload");
  btn("observe").disabled=busy||!source||!loaded||!(/\.c$/i.test(source.name))||observing;btn("save").disabled||=!dirty;btn("remove").disabled||=!cases.length;btn("add").disabled||=cases.length>=32;
- btn("cancel").disabled=!runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
- el("saved").textContent=!loaded?"测试数据读取失败；不会覆盖原文件。":dirty?"有未保存修改；运行前将保存样例。":"样例已同步到磁盘（空列表不会自动写入）。";
+ btn("cancel").disabled=!runningTest;btn("cancel").hidden=!runningTest;btn("run").hidden=runningTest;btn("all").hidden=runningTest;input.disabled=compare.disabled=compiler.disabled=busy||!loaded;expected.disabled=busy||!loaded||!compare.checked;
+ el("saved").textContent=!loaded?"读取失败":dirty?"未保存":"";el("saved").title=dirty?"运行前仍会按原规则保存；也可手动保存。":"";for(const b of Array.from(el("tabs").querySelectorAll<HTMLButtonElement>("button")))b.disabled=busy;
+}
+function caseResult(index:number){return last?.cases.find(c=>c.index===index)}
+function matches(c:CaseResult,index:number){const current=cases[index]??{input:"",expected:null};return current.input===c.input&&current.expected===c.expected}
+function renderTabs(){
+ const tabs=el("tabs"),scroll=tabs.scrollLeft;tabs.replaceChildren();
+ const list=cases.length?cases:[{input:"",expected:null}];
+ list.forEach((_,i)=>{const c=caseResult(i),b=document.createElement("button");b.className="case-tab";b.textContent=cases.length?"样例 "+(i+1):"空输入";b.setAttribute("aria-selected",String(i===selected));b.disabled=busy;
+ const state=c?(last?.stale||!matches(c,i)?"stale":c.state):"unrun";
+ const icons:Record<string,string>={passed:"✓",mismatch:"≠",ran:"•",stale:"◷",unrun:"—"};
+ const label=state==="stale"?"结果已过期":state==="unrun"?"尚未运行":labels[state]??state;
+ b.append(node("span",icons[state]??"!","case-state "+state));b.title=label;b.setAttribute("aria-label",(cases.length?"样例 "+(i+1):"空输入")+" · "+label);
+ b.onclick=()=>{selected=i;rawResult=false;renderCases();el("tabs").querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()};tabs.append(b)});
+ tabs.scrollLeft=scroll;
 }
 function renderCases(){
- const tabs=el("tabs");tabs.replaceChildren();
- cases.forEach((_,i)=>{const b=document.createElement("button");b.textContent="样例 "+(i+1);b.setAttribute("aria-selected",String(i===selected));b.disabled=busy;b.onclick=()=>{selected=i;renderCases()};tabs.append(b)});
- const c=cases[selected];el("empty").hidden=!!c;el("editor").hidden=!c;
+ renderTabs();const c=cases[selected];el("empty").hidden=!!c;el("editor").hidden=!c;
  input.value=c?.input??"";compare.checked=c?.expected!==null&&!!c;expected.value=c?.expected??"";
- btn("run").textContent=c?"运行当前样例":"空输入运行";updateControls();
+ btn("run").textContent=c?"运行样例":"空输入运行";updateControls();renderResult();
 }
 function applySet(s:CaseSet){cases=s.cases??[];revision=s.revision;dirty=false;loaded=true;selected=Math.min(selected,Math.max(0,cases.length-1));renderCases();}
-async function reload(){loaded=false;updateControls();try{applySet(await call<CaseSet>("LoadCases"));status.textContent="测试数据已读取"}catch(e){status.textContent=String(e)}finally{updateControls()}}
+async function reload(){loaded=false;updateControls();try{applySet(await call<CaseSet>("LoadCases"));status.textContent=""}catch(e){status.textContent=String(e)}finally{updateControls()}}
 async function select(nav:Nav){
  if(!nav.root)return;
  navEpoch++;
  if(root!==nav.root){root=nav.root;expanded=new Set([root]);treeEntries.clear();seenMissing.clear()}
- el("folder").textContent=root;
+ el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
+ el("workspace").scrollTop=0;closeFileMenu();rawResult=false;if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
- el("title").textContent=source?.name??"选择一个源文件";el("path").textContent=source?.path??root;el("work").hidden=!source;
+ el("title").textContent=source?.name??"选择一个源文件";el("path").textContent=source?source.directory.slice(root.length).replace(/^[\\/]/,"")||el("folder").textContent:root;el("path").title=source?.path??root;el("work").hidden=!source;el("fileActions").hidden=!source;el("batchSummary").textContent="";
  if(source){let dir=source.directory;while(dir&&dir!==root){expanded.add(dir);const next=dir.replace(/[\\/][^\\/]+$/,"");if(next===dir||next.length<root.length)break;dir=next}compiler.value=compilerByLanguage[language(source)];const wasMissing=seenMissing.has(source.path);if(wasMissing)await call("Invalidate",source.path);await reload();
   if(seenMissing.has(source.path)&&revision!=="missing"){if(!await dialogs.confirm("此路径曾消失，存在旧测试数据。是否继续使用这些样例？")){loaded=false;status.textContent="未确认旧样例；请重新选择文件";}else seenMissing.delete(source.path)}
   if(loaded){const cached=await call<Result|null>("Cached",compiler.value.trim());if(cached){if(seenMissing.has(source.path))cached.stale=true;show(cached)}await showOrphans()}
@@ -73,20 +86,20 @@ async function showOrphans(){
  }catch(e){box.append(node("p",String(e),"muted"))}
 }
 function drawTree(){
- const host=el("file");host.replaceChildren();
+ const host=el("file"),scroll=host.scrollTop;host.replaceChildren();
  function branch(dir:string,container:HTMLElement,depth:number){
   if(depth>24)return;
   for(const e of treeEntries.get(dir)??[]){
-   const b=document.createElement("button");b.textContent=(e.directory?(expanded.has(e.path)?"▾ ":"▸ "):"  ")+e.name;b.disabled=busy;b.setAttribute("aria-current",String(source?.path===e.path));
+   const row=node("div","","tree-row");const b=document.createElement("button");b.className="tree-item";b.textContent=(e.directory?(expanded.has(e.path)?"▾ ":"▸ "):"  ")+e.name;b.title=e.path;b.disabled=busy;b.setAttribute("aria-current",String(source?.path===e.path));
    if(e.directory){b.onclick=()=>{if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);void refreshTree(true)}}}else{b.onclick=()=>void navigate(async()=>select(await call<Nav>("Select",e.path)))}
-   container.append(b);
+   row.append(b);if(!e.directory&&source?.path===e.path){row.classList.add("selected");const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.title="当前文件操作";more.setAttribute("aria-label","当前文件操作");more.disabled=busy;more.onclick=()=>openFileMenu(more);b.oncontextmenu=ev=>{ev.preventDefault();if(!busy)openFileMenu(more)};row.append(more)}container.append(row);
    if(e.directory&&expanded.has(e.path)){const child=node("div","","branch");container.append(child);branch(e.path,child,depth+1)}
   }
  }
- if(root)branch(root,host,0);
+ if(root)branch(root,host,0);host.scrollTop=scroll;
 }
 async function refreshTree(force=false){
- if(!root||refreshing||(!force&&busy))return;
+ if(!root||refreshing||(!force&&busy)||(!force&&!fileMenu.hidden))return;
  refreshing=true;const epoch=navEpoch,base=root;
  try{
   const next=new Map<string,Entry[]>();const queue=[base];const present=new Set<string>();let scanned=0;
@@ -97,41 +110,91 @@ async function refreshTree(force=false){
   }
   for(const [dir,entries] of next){const old=treeEntries.get(dir)??[];for(const e of old){if(!e.directory&&!present.has(e.path)){seenMissing.add(e.path);await call("Invalidate",e.path);if(epoch!==navEpoch)return}}}
   const changed=JSON.stringify([...next])!==JSON.stringify([...treeEntries]);treeEntries=next;if(changed||force)drawTree();
-  el("treeNotice").textContent=queue.length?"展开目录过多，最多刷新 128 个目录。":"";
+  el("treeNotice").textContent=queue.length?"展开目录过多，最多刷新 128 个目录。":"";el("treeNotice").hidden=!el("treeNotice").textContent;
   if(source&&!busy){
    const selectedPath=source.path;const exists=await call<boolean>("CheckSelected");
    if(epoch!==navEpoch||source?.path!==selectedPath)return;
    if(!exists){seenMissing.add(selectedPath);markStale();loaded=false;updateControls();status.textContent="源文件已移走或删除；样例仍保留。"}
   }
   if(last&&source&&!dirty&&!busy){const id=last.runId;if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id&&epoch===navEpoch)markStale()}
- }catch(e){el("treeNotice").textContent=String(e);markStale()}finally{refreshing=false}
+ }catch(e){el("treeNotice").textContent=String(e);el("treeNotice").hidden=false;markStale()}finally{refreshing=false}
 }
 async function storeConfig(){try{await call("StoreConfig",compilerByLanguage.c.trim(),compilerByLanguage.cpp.trim(),editorPath.trim())}catch(e){status.textContent="配置保存失败："+String(e)}}
 async function navigate(action:()=>Promise<void>){
  if(busy||dialogs.isOpen())return;
  busy=true;updateControls();drawTree();try{if(dirty&&!await dialogs.confirm("放弃尚未保存的样例修改？","放弃修改"))return;navEpoch++;await action();await storeConfig()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();drawTree();void refreshTree(true)}
 }
-async function save(){if(!dirty)return;applySet(await call<CaseSet>("SaveCases",cases,revision));status.textContent="测试数据已保存";}
+async function save(){if(!dirty)return;applySet(await call<CaseSet>("SaveCases",cases,revision));status.textContent="";}
 function node(tag:string,text:string,cls=""){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;}
-function output(title:string,text:string){const d=node("div","");d.append(node("h3",title),node("pre",text||"（空输出）"));return d;}
-function diffView(title:string,parts:Part[]){const d=node("div","");const pre=node("pre","");for(const part of parts){const n=node("span",part.text,part.changed?"diffmark":"");pre.append(n)}if(!parts.length)pre.textContent="（空输出）";d.append(node("h3",title),pre);return d;}
-function show(r:Result){
- last=r;result.hidden=false;stale.hidden=!r.stale;status.textContent=labels[r.state]??r.state;
- const passed=r.cases.filter(c=>c.state==="passed").length,compared=r.cases.filter(c=>c.expected!==null).length;
- el("meta").textContent=r.compiler+(r.kitVersion?" · Exam Kit "+r.kitVersion+" · "+(r.components?.length??0)+" 个组件":"")+" · "+(compared?passed+"/"+compared+" 已运行的比较样例通过":"已运行 "+r.cases.length+" 组");
- const wrap=el("results");wrap.replaceChildren();
- for(const c of r.cases){
-  const d=node("article","","resultcard");
-  d.append(node("h3","样例 "+(c.index+1)+" · "+(labels[c.state]??c.state)),node("p",c.process.elapsedMs+" ms · 退出码 "+c.process.exitCode,"muted"),output("本次输入",c.input));
-  const row=node("div","","outputs");if(c.expected!==null)row.append(output("预期输出",c.expected));row.append(output("实际输出",c.process.stdout));d.append(row);
-  if(c.difference){const df=c.difference;const block=node("div","","difference");block.append(node("p","首处差异 · 第 "+df.line+" 行，第 "+df.column+" 列"),node("pre","预期："+df.expected+"\n实际："+df.actual));if(df.expectedParts&&df.actualParts){const highlights=node("div","","outputs");highlights.append(diffView("预期（比较文本）",df.expectedParts),diffView("实际（比较文本）",df.actualParts));block.append(highlights,node("p",df.coarse?"长差异使用整段高亮；上方保留原始输出。":"下划线高亮不同字符；上方保留原始输出。","difflegend"))}else if(df.coarse){block.append(node("p","输出过长，仅定位首处差异。","difflegend"))}d.append(block)}
-  if(c.process.stderr)d.append(output("标准错误",c.process.stderr));wrap.append(d)
- }
- const diag=el("diagnostics");diag.replaceChildren();
- for(const x of r.diagnostics??[]){const d=node("div","","diagnostic");d.append(node("p",x.severity+" · "+(x.file?x.file+":"+x.line+"："+x.message:x.message)),node("pre",x.raw));diag.append(d)}
- if(r.compilation.stdout)diag.append(output("编译输出",r.compilation.stdout));
- if(!diag.childElementCount)diag.append(node("p","无编译诊断","muted"));
+function output(title:string,text:string){const d=node("div","","output-block");if(title)d.append(node("h3",title));d.append(node("pre",text||"（空输出）"));return d}
+function normalized(s:string){return s.replace(/\r\n/g,"\n").split("\n").map(l=>l.replace(/[ \t]+$/,"")).join("\n").replace(/\n+$/,"")}
+function diffCell(text:string|undefined,other:string|undefined){
+ const cell=node("td","");if(text===undefined){cell.textContent="—";cell.className="muted";return cell}
+ const limit=4000;
+ if(text.length>limit||(other?.length??0)>limit){cell.textContent=text.slice(0,limit)+(text.length>limit?"…":"");if(text!==other)cell.className="diffmark";return cell}
+ if(text===other){cell.textContent=text||" ";return cell}
+ const a=Array.from(text),b=Array.from(other??"");let p=0,s=0;
+ while(p<a.length&&p<b.length&&a[p]===b[p])p++;
+ while(s<a.length-p&&s<b.length-p&&a[a.length-1-s]===b[b.length-1-s])s++;
+ cell.append(document.createTextNode(a.slice(0,p).join("")),node("span",a.slice(p,a.length-s).join("")||"∅","diffmark"),document.createTextNode(a.slice(a.length-s).join("")));
+ return cell
 }
+function comparison(c:CaseResult){
+ const e=normalized(c.expected??"").split("\n"),a=normalized(c.process.stdout).split("\n");
+ const count=Math.max(e.length,a.length),table=document.createElement("table");table.className="output-table";
+ const head=document.createElement("thead"),hr=document.createElement("tr");for(const label of ["行","预期","实际"])hr.append(node("th",label));head.append(hr);table.append(head);
+ const body=document.createElement("tbody"),cap=Math.min(count,500);let clipped=false;
+ // Preview around first known difference for long output. Comparison status
+ // remains authoritative from Go; this view never recomputes pass/fail.
+ const start=Math.max(0,Math.min(count-cap,(c.difference?.line??1)-20));
+ for(let n=start;n<start+cap;n++){const row=document.createElement("tr"),x=e[n],y=a[n];if(x!==y)row.className="bad-row";if((x?.length??0)>4000||(y?.length??0)>4000)clipped=true;
+ row.append(node("th",String(n+1)),diffCell(x,y),diffCell(y,x));body.append(row)}
+ table.append(body);const wrap=node("div","","comparison");wrap.append(table);
+ if(count>cap||clipped)wrap.append(node("p","对比仅展示部分内容；完整输出见原始文本。","muted note"));
+ return wrap
+}
+function renderResult(){
+ result.hidden=!last;const wrap=el("results"),diag=el("diagnostics");wrap.replaceChildren();diag.replaceChildren();
+ el("diagnosticsSection").hidden=true;btn("rawToggle").hidden=true;el("batchSummary").textContent="";
+ if(!last)return;const r=last,c=caseResult(selected),past=!!c&&(r.stale||!matches(c,selected));
+ stale.hidden=!r.stale&&!past;
+ el("meta").textContent=r.compiler+(r.kitVersion?" · Exam Kit "+r.kitVersion+" · "+(r.components?.length??0)+" 个组件":"");
+ const compared=r.cases.filter(c=>c.expected!==null),passed=compared.filter(c=>c.state==="passed").length;
+ el("batchSummary").textContent=(r.stale?"上次 · ":"")+(r.state==="completed"?(compared.length?passed+"/"+compared.length+" 组通过":"已运行 "+r.cases.length+" 组"):labels[r.state]??r.state);
+ el("resultTitle").textContent=c?labels[c.state]??c.state: r.state==="completed"?"当前样例尚未运行":labels[r.state]??r.state;
+ el("resultTitle").className=c&&!past?c.state:"";
+ el("resultMeta").textContent=c?c.process.elapsedMs+" ms"+(c.process.exitCode!==0?" · 退出码 "+c.process.exitCode:""):"";
+ if(c){
+  if(past){const frozen=document.createElement("details");frozen.className="snapshot";frozen.append(node("summary","历史运行快照（非当前样例）"),output("本次输入",c.input));if(c.expected!==null)frozen.append(output("本次预期",c.expected));wrap.append(frozen)}
+  if(c.difference&&c.expected!==null){
+   btn("rawToggle").hidden=false;btn("rawToggle").textContent=rawResult?"逐行对比":"原始文本";
+   if(rawResult){const row=node("div","","outputs");row.append(output("预期",c.expected),output("实际",c.process.stdout));wrap.append(row)}
+   else{wrap.append(comparison(c));wrap.append(node("p","首处差异 · 第 "+c.difference.line+" 行，第 "+c.difference.column+" 列","muted note"))}
+  }else wrap.append(output("实际输出",c.process.stdout));
+  if(c.process.stderr)wrap.append(output("标准错误",c.process.stderr));
+ }
+ for(const x of r.diagnostics??[]){const d=node("div","","diagnostic");d.append(node("p",x.severity+" · "+(x.file?x.file+":"+x.line+"："+x.message:x.message)));const more=document.createElement("details");more.append(node("summary","完整诊断"),node("pre",x.raw));d.append(more);diag.append(d)}
+ if(r.compilation.stdout)diag.append(output("编译输出",r.compilation.stdout));
+ if(!diag.childElementCount&&r.compilation.stderr)diag.append(output("编译错误",r.compilation.stderr));
+ el("diagnosticsSection").hidden=!diag.childElementCount;
+}
+function show(r:Result){last=r;rawResult=false;status.textContent="";renderTabs();renderResult()}
+btn("rawToggle").onclick=()=>{rawResult=!rawResult;renderResult()};
+const fileMenu=el("fileMenu");let menuAnchor:HTMLElement|undefined;
+function closeFileMenu(){fileMenu.hidden=true;menuAnchor=undefined}
+function openFileMenu(anchor:HTMLElement){if(!fileMenu.hidden){closeFileMenu();return}menuAnchor=anchor;fileMenu.hidden=false;const box=anchor.getBoundingClientRect();fileMenu.style.left=Math.max(4,Math.min(box.right-fileMenu.offsetWidth,innerWidth-fileMenu.offsetWidth-4))+"px";fileMenu.style.top=Math.max(4,Math.min(box.bottom,innerHeight-fileMenu.offsetHeight-4))+"px";btn("rename").focus()}
+document.addEventListener("pointerdown",e=>{if(!fileMenu.hidden&&!fileMenu.contains(e.target as Node)&&!menuAnchor?.contains(e.target as Node))closeFileMenu();for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu[open]")))if(!d.contains(e.target as Node))d.open=false});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!fileMenu.hidden){const a=menuAnchor;closeFileMenu();a?.focus()}if(e.key==="Escape")for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu[open]")))d.open=false});
+fileMenu.addEventListener("click",()=>closeFileMenu());
+for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu")))d.addEventListener("click",e=>{if((e.target as HTMLElement).closest("button"))d.open=false});
+el("file").addEventListener("scroll",closeFileMenu);
+window.addEventListener("resize",closeFileMenu);
+const grip=el("sidebarGrip"),shell=el("shell");
+let sidebarWidth=220;
+function resizeSidebar(width:number){sidebarWidth=Math.max(150,Math.min(420,width));shell.style.setProperty("--sidebar-width",sidebarWidth+"px");grip.setAttribute("aria-valuenow",String(sidebarWidth));closeFileMenu()}
+grip.addEventListener("pointerdown",e=>{grip.setPointerCapture(e.pointerId);e.preventDefault()});
+grip.addEventListener("pointermove",e=>{if(grip.hasPointerCapture(e.pointerId))resizeSidebar(e.clientX-shell.getBoundingClientRect().left)});
+grip.addEventListener("keydown",e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();resizeSidebar(sidebarWidth+(e.key==="ArrowLeft"?-12:12))}});
 async function run(all:boolean){
  if(busy||!source||!loaded)return;
  busy=true;updateControls();renderCases();drawTree();
@@ -189,5 +252,5 @@ btn("cancel").onclick=async()=>{btn("cancel").disabled=true;try{await call("Canc
 window.addEventListener("focus",async()=>{if(last&&!busy&&!dirty){const id=last.runId;try{if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id)markStale()}catch{markStale()}}});
 document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!manual.isOpen()){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!busy){e.preventDefault();void manual.open()}});
 window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
-async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;status.textContent="请选择 C/C++ 文件";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
+async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;status.textContent="";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
 void boot();
