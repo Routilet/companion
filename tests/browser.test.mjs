@@ -74,7 +74,8 @@ async function setup(t){
     state.name=args[1];state.names.push(state.name);state.cases=[];state.revision='missing';return nav();
    case 'Rename':
     state.names=state.names.map(n=>n===state.name?args[0]:n);state.name=args[0];return nav();
-   case 'SaveCases':state.cases=structuredClone(args[0]);state.revision='saved';return {cases:state.cases,revision:state.revision};
+   case 'CopyPrepared':return;
+   case 'SaveCases':if(state.failSave)throw Error('样例版本冲突');state.cases=structuredClone(args[0]);state.revision='saved';return {cases:state.cases,revision:state.revision};
    case 'Observe':if(state.failObserve)throw Error('Observer 尚未安装');state.observing=true;return;
    case 'ObservationState':return state.observing?'running':'closed';
    default:throw Error('unexpected RPC '+method);
@@ -128,7 +129,7 @@ test('cancel dirty navigation and delete confirmation preserve samples',async t=
  assert.equal(await p.locator('#input').inputValue(),'unsaved');
  await p.locator('#caseMenu summary').click();await p.locator('#remove').click();await p.locator('#actionAccept').click();
  await p.locator('#empty').waitFor();
- assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='SaveCases').length),0);
+ await p.waitForFunction(()=>fixture.cases.length===0&&fixture.calls.some(c=>c[0]==='SaveCases'));
 });
 
 test('long file tree has independent scrolling and a resizable sidebar',async t=>{
@@ -144,7 +145,7 @@ test('long file tree has independent scrolling and a resizable sidebar',async t=
  assert.ok(scroll.tree>0);assert.equal(scroll.body,0);assert.equal(scroll.main,0);
  const grip=p.locator('#sidebarGrip');await grip.focus();await p.keyboard.press('ArrowRight');assert.equal(await grip.getAttribute('aria-valuenow'),'232');
 });
-test('batch results follow selected sample, compare once, and edits invalidate prior status without auto-save',async t=>{
+test('batch results follow selected sample, compare once, and edits invalidate prior status',async t=>{
  const p=await setup(t);
  await p.locator('#add').click();await p.locator('#input').fill('input-one');await p.locator('#compare').check();await p.locator('#expected').fill('8');
  await p.locator('#add').click();await p.locator('#input').fill('input-two');await p.locator('#compare').check();await p.locator('#expected').fill('1 2\n4 5');
@@ -155,11 +156,10 @@ test('batch results follow selected sample, compare once, and edits invalidate p
    {index:1,input:'input-two',expected:'1 2\n4 5',process:process('1 2\n4 6\n'),state:'mismatch',difference:{line:2,column:3,expected:'5',actual:'6'}}
   ]};fixture.holdRun=true;
  });
- assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='SaveCases').length),0);
  await p.locator('#all').click();await p.locator('#cancel').waitFor();assert.equal(await p.locator('#run').isVisible(),false);
  await p.waitForFunction(()=>!!fixture.finishRun);await p.evaluate(()=>fixture.finishRun());
  await p.waitForFunction(()=>document.querySelector('#resultTitle').textContent==='输出不一致'&&!document.querySelector('#all').disabled);
- assert.equal(await p.locator('#results .output-table tbody tr').count(),2);
+ assert.equal(await p.locator('#results .output-table tbody tr').count(),2);assert.equal(await p.locator('#expected').isVisible(),false);
  assert.equal(await p.locator('#results .bad-row').count(),1);
  assert.equal(await p.locator('#results .diffmark').count(),2);
  assert.equal(await p.locator('#diagnosticsSection').isVisible(),false);
@@ -174,8 +174,7 @@ test('batch results follow selected sample, compare once, and edits invalidate p
  await p.locator('#input').fill('changed');
  assert.equal(await p.locator('#stale').isVisible(),true);
  assert.equal(await p.locator('#results .snapshot').count(),1);
- assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='SaveCases').length),1);
- assert.equal(await p.locator('#saved').textContent(),'未保存');
+ await p.waitForFunction(()=>fixture.cases[0].input==='changed');assert.equal(await p.locator('#saved').textContent(),'');
 });
 
 test('explicit new location and editor detection do not depend on system default',async t=>{
@@ -219,18 +218,18 @@ test('OJ cached state survives keyed tree refresh, explicit refresh is the only 
  await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.waitForFunction(()=>document.querySelector('#title').textContent==='B.c'&&!document.querySelector('#new').disabled);
  await p.locator('.tree-item').filter({hasText:'A.c'}).click();await p.waitForFunction(()=>!document.querySelector('#new').disabled);await p.locator('#ojMode').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
  assert.match(await p.locator('#ojJudgeText').textContent(),/曾 AC.*WA/);
- await p.locator('#ojRefreshCurrent').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshJudges'));
+ await p.locator('#ojDetailBtn').click();await p.locator('#ojRefreshCurrent').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshJudges'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges')), [['OJRefreshJudges',['/work/A.c']]]);
- await p.waitForFunction(()=>!document.querySelector('#ojUnbind').disabled);
- await p.locator('#ojUnbind').click();await p.locator('#actionAccept').click();await p.waitForFunction(()=>document.querySelector('#ojBinding').hidden&&!document.querySelector('.tree-judge:not([hidden])'));
+ await p.locator('#ojDetailClose').click();await p.waitForFunction(()=>!document.querySelector('#ojUnbind').disabled);
+ await p.locator('#ojProblemMenu summary').click();await p.locator('#ojUnbind').click();await p.locator('#actionAccept').click();await p.waitForFunction(()=>document.querySelector('#ojBinding').hidden&&!document.querySelector('.tree-judge:not([hidden])'));
 });
 
 test('online submission in unified preview requires explicit language and confirmation',async t=>{
  const p=await setup(t);
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'problemset'}}});
- await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitPrepare').waitFor();
+ await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitConfirm').waitFor();
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),0);
- await p.locator('#ojSubmitPrepare').click();await p.locator('#ojSubmitConfirm').waitFor();
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJPrepareSubmission').length),1);
  assert.equal(await p.locator('#ojSubmitConfirm').isDisabled(),true);
  await p.locator('#ojSubmitLanguage').selectOption('C');await p.locator('#ojSubmitConfirm').click();
  await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('#12'));
@@ -245,7 +244,7 @@ test('unavailable Adapter hides all OJ entry points even for an existing binding
  await p.evaluate(()=>fixture.ojAvailable=false);
  await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#ojLogin').disabled&&!document.querySelector('#ojCheckAgain').disabled);
  await p.locator('#closeConfig').click();await p.waitForFunction(()=>['ojImport','ojRefreshTree','ojBinding','ojBindingError','ojJudgeInfo'].every(id=>document.getElementById(id).hidden)&&!document.querySelector('.tree-judge:not([hidden])'));
- await p.locator('#copy').click();await p.locator('#preview').waitFor();assert.equal(await p.locator('#ojSubmitArea').isVisible(),false);assert.equal(await p.locator('#copyConfirm').isEnabled(),true);await p.locator('#closePreview').click();
+ await p.locator('#previewSource').click();await p.locator('#preview').waitFor();assert.equal(await p.locator('#ojSubmitArea').isVisible(),false);assert.equal(await p.locator('#copyConfirm').isEnabled(),true);await p.locator('#closePreview').click();
  await p.evaluate(()=>fixture.ojAvailable=true);
  await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojCheckAgain').disabled);await p.locator('#ojCheckAgain').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);
  await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
@@ -268,6 +267,8 @@ test('detailed judge table uses actual line structure and concise signal guidanc
 test('ordinary copy remains offline even when OJ is installed',async t=>{
  const p=await setup(t);await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'题',label:'A',target:{kind:'problemset',problemId:'5'}}});
  await p.locator('#settings').click();await p.waitForFunction(()=>!document.querySelector('#ojLogin').disabled);await p.locator('#closeConfig').click();
- await p.locator('#copy').click();assert.equal(await p.locator('#ojSubmitArea').isVisible(),false);
+ await p.locator('#copy').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='CopyPrepared'));assert.equal(await p.locator('#preview').isVisible(),false);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSubmissionAvailable').length),0)
 });
+
+test('autosave failure preserves edits and blocks navigation; explicit retry succeeds',async t=>{const p=await setup(t);await p.evaluate(()=>{fixture.names.push('B.c');fixture.failSave=true});await p.locator('#add').click();await p.locator('#input').fill('keep me');await p.locator('#save').waitFor();await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.waitForFunction(()=>!document.querySelector('#new').disabled);assert.equal(await p.locator('#title').textContent(),'A.c');assert.equal(await p.locator('#input').inputValue(),'keep me');await p.evaluate(()=>fixture.failSave=false);await p.locator('#save').click();await p.waitForFunction(()=>fixture.cases[0]?.input==='keep me');await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.waitForFunction(()=>document.querySelector('#title').textContent==='B.c')});
