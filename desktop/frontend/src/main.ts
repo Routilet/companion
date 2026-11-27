@@ -162,7 +162,6 @@ setInterval(async()=>{
  try{const s=await call<string>("ObservationState");if(s!=="running"){observing=false;el("observerState").textContent=s==="closed"?"观察窗口已关闭，会话已清理。":s;updateControls()}}catch(e){el("observerState").textContent=String(e)}finally{observerPolling=false}
 },1000);
 function showObserver(o:ObserverInfo){el("observerConfigStatus").textContent=o.error?"Observer 不可用："+o.error:"Observer "+o.version+" · "+o.backend}
-btn("chooseObserver").onclick=async()=>{try{showObserver(await call<ObserverInfo>("ChooseObserver"))}catch(e){el("observerConfigStatus").textContent=String(e)}};
 const preview=el<HTMLDialogElement>("preview"),config=el<HTMLDialogElement>("config");
 const manual=installManual(call,()=>!!runtime&&!busy&&!preview.open&&!config.open);
 btn("openEditor").onclick=async()=>{try{await call("OpenEditor",editorPath.trim());status.textContent="已请求打开编辑器"}catch(e){status.textContent=String(e)}};
@@ -172,7 +171,6 @@ btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};
 function showKit(k:KitStatus){el("kitStatus").textContent=k.error?"资源不可用："+k.error:"Exam Kit "+k.version+" · "+k.path}
-btn("chooseKit").onclick=async()=>{try{showKit(await call<KitStatus>("ChooseKit"))}catch(e){el("kitStatus").textContent=String(e)}};
 btn("settings").onclick=()=>{el<HTMLInputElement>("cc").value=compilerByLanguage.c;el<HTMLInputElement>("cxx").value=compilerByLanguage.cpp;el<HTMLInputElement>("editorPath").value=editorPath;config.showModal();void call<ObserverInfo>("ObserverStatus").then(showObserver).catch(e=>{el("observerConfigStatus").textContent=String(e)});void call<KitStatus>("KitStatus").then(showKit).catch(e=>{el("kitStatus").textContent=String(e)})};
 btn("closeConfig").onclick=()=>config.close();
 btn("saveConfig").onclick=async()=>{compilerByLanguage.c=el<HTMLInputElement>("cc").value.trim();compilerByLanguage.cpp=el<HTMLInputElement>("cxx").value.trim();editorPath=el<HTMLInputElement>("editorPath").value.trim();if(source)compiler.value=compilerByLanguage[language(source)];markStale();await storeConfig();config.close()};
@@ -190,5 +188,5 @@ btn("cancel").onclick=async()=>{btn("cancel").disabled=true;try{await call("Canc
 window.addEventListener("focus",async()=>{if(last&&!busy&&!dirty){const id=last.runId;try{if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id)markStale()}catch{markStale()}}});
 document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&source&&!preview.open&&!config.open&&!manual.isOpen()){e.preventDefault();void run(false)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!manual.isOpen()&&!preview.open&&!config.open&&!busy){e.preventDefault();void manual.open()}});
 window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
-async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;status.textContent="请选择 C/C++ 文件";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
+async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;status.textContent="请选择 C/C++ 文件";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
 void boot();
