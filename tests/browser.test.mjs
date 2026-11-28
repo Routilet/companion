@@ -357,3 +357,21 @@ test('contest material refresh is explicit and only affects selected group',asyn
  await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshMaterials'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshMaterials')),[['OJRefreshMaterials',['/work/A.c']]]);
 });
+
+
+test('shared design snapshot renders unique inline icons and stable shell',async t=>{
+ const p=await setup(t);
+ assert.deepEqual(await p.evaluate(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.filter((v,i)=>ids.indexOf(v)!==i)}),[]);
+ assert.ok(await p.evaluate(()=>[...document.querySelectorAll('svg.ui-icon use')].every(u=>document.getElementById(u.getAttribute('href').slice(1)))));
+ const start=await p.locator('.sidebar').boundingBox();
+ await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);
+ assert.deepEqual(await p.locator('.sidebar').boundingBox(),start);
+ await p.locator('#workbenchBtn').click();assert.deepEqual(await p.locator('.sidebar').boundingBox(),start);
+ await p.emulateMedia({colorScheme:'dark'});
+ assert.equal(await p.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),'dark');
+ await p.setViewportSize({width:680,height:600});
+ assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await p.locator('#openMenu summary').click();
+ const menu=await p.locator('#openMenu .menuitems').boundingBox();
+ assert.ok(menu.x>=0&&menu.x+menu.width<=680&&menu.y>=0&&menu.y+menu.height<=600);
+});
