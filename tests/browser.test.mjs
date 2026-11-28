@@ -197,7 +197,7 @@ test('explicit new location and editor detection do not depend on system default
 test('manual preserves version-scoped reading state and copies a signature',async t=>{
  const p=await setup(t);
  await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);
- await p.locator('#manualNav summary').click();await p.locator('#manualNav [data-entry]').click();
+ await p.locator('#manualNav [data-entry]').click();
  assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
  assert.ok(await p.locator('#manualDetail .syntax-keyword').count()>0);
  await p.getByRole('button',{name:'复制函数接口'}).click();
@@ -205,7 +205,7 @@ test('manual preserves version-scoped reading state and copies a signature',asyn
  assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='CopyManualSignature')),['CopyManualSignature','read_number','','fixture-v1','int read_int(void);']);
  const side=await p.locator('.sidebar').boundingBox();assert.equal(await p.locator('#shell').isVisible(),true);assert.equal(await p.locator('#workspace').isVisible(),false);assert.equal(await p.locator('#manualSidebar').isVisible(),true);assert.equal(await p.locator('#workbenchSidebar').isVisible(),false);await p.locator('#workbenchBtn').click();assert.equal(await p.locator('#workspace').isVisible(),true);assert.equal(await p.locator('#manualSidebar').isVisible(),false);assert.deepEqual(await p.locator('.sidebar').boundingBox(),side);await p.locator('#manualBtn').click();
  await p.waitForFunction(()=>document.querySelector('#manualDetail h2')?.textContent==='读取数字'&&!document.querySelector('#manualSearch').disabled);
- assert.equal(await p.locator('#manualNav details').getAttribute('open'),'');
+ assert.equal(await p.locator('#manualNav details').count(),0);
  await p.locator('#manualSearch').fill('读取');await p.waitForFunction(()=>document.querySelector('#manualNav [data-entry] small'));
  await p.locator('#manualSearch').press('ArrowDown');await p.locator('#manualSearch').press('Enter');
  assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
@@ -383,3 +383,5 @@ test('sidebar occupies full content height and page controls stay in right pane'
  assert.equal(await p.locator('.workspace-picker').isVisible(),false);assert.deepEqual(await p.locator('.sidebar').boundingBox(),sidebar);
  await p.locator('#workbenchBtn').click();assert.equal(await p.locator('.workspace-picker').isVisible(),true);
 });
+
+test('manual uses a flat list and tag filter with no category navigation',async t=>{const p=await setup(t);await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);assert.equal(await p.locator('#manualNav details').count(),0);await p.locator('#manualFilter summary').click();await p.locator('#manualTags button').first().click();assert.equal(await p.locator('#manualSelectedTags button').count(),1);await p.locator('#manualSelectedTags button').first().click();assert.equal(await p.locator('#manualSelectedTags button').count(),0);});
