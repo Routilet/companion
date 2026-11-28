@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Routilet/c-exam-kit
-          ref: f17f8715c6ca552b059da4f95969d956026e584a
+          ref: 72ccfbaeb3a14607bde818d10df34f6c8fcf2684
           path: exam-kit-fixture
           persist-credentials: false
       - uses: actions/setup-go@v5
@@ -80,14 +80,14 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build
       - name: Build actual Exam Kit fixture
-        working-directory: exam-kit-fixture/npm/accoding-preset
-        run: node scripts/build-preset.mjs
+        working-directory: exam-kit-fixture
+        run: node scripts/build.mjs
       - name: Download actual Observer release
         run: node scripts/fetch-observer-fixture.mjs observer-fixture
       - name: Verify locked dependencies and core
         shell: bash
         env:
-          COMPANION_TEST_KIT_PACKAGE: ${{ github.workspace }}/exam-kit-fixture/npm/accoding-preset
+          COMPANION_TEST_KIT_PACKAGE: ${{ github.workspace }}/exam-kit-fixture/dist/package
           COMPANION_TEST_OBSERVER_PACKAGE: ${{ github.workspace }}/observer-fixture/package
         run: |
           set -euo pipefail
@@ -231,8 +231,8 @@ jobs:
           fi
   publish:
     needs: [package, installed, frontend, managed-adapter]
-    # Authorized 0.2.0-beta.1 and beta.2 test releases; other versions require dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && (needs.package.outputs.version == '0.1.0' || needs.package.outputs.version == '0.2.0-beta.1' || needs.package.outputs.version == '0.2.0-beta.2')))
+    # Authorized 0.2.0 stable release; explicit dispatch for other versions.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && (needs.package.outputs.version == '0.1.0' || needs.package.outputs.version == '0.2.0-beta.1' || needs.package.outputs.version == '0.2.0-beta.2' || needs.package.outputs.version == '0.2.0')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -254,7 +254,7 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0 && "$version" != 0.2.0-beta.1 && "$version" != 0.2.0-beta.2 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0 && "$version" != 0.2.0-beta.1 && "$version" != 0.2.0-beta.2 && "$version" != 0.2.0 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
           if [[ "$version" == 0.1.0 ]]; then
             for spec in @routilet/routilet@0.1.8 @routilet/accoding-adapter@0.1.0 @routilet/c-exam-kit@0.6.10; do
@@ -266,7 +266,7 @@ jobs:
               test "$found" = true
             done
           fi
-          if [[ "$version" == 0.1.0 ]]; then
+          if [[ "$version" == 0.1.0 || "$version" == 0.2.0 ]]; then
             code="$(curl --silent --show-error --output /tmp/companion-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in
               200) test "$(npm view @routilet/companion dist-tags.latest --registry=https://registry.npmjs.org/)" = "$version"; echo "Stable version already published; no tag changes."; exit 0 ;;

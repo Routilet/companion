@@ -55,7 +55,8 @@ func TestActualKitReference(t *testing.T){
  pkg:=os.Getenv("COMPANION_TEST_KIT_PACKAGE");if pkg==""{t.Skip("real package fixture not provided")}
  m,e:=LoadManual("",pkg);if e!=nil{t.Fatal(e)}
  count:=0;for _,c:=range m.Reference.Categories{count+=len(c.Entries)}
- if count<50||len(m.Reference.Sections)!=5||m.Reference.Notes==""{t.Fatal("unexpected actual reference",count)}
+ if m.Reference.SchemaVersion==2{count=len(m.Reference.AllEntries())}
+ if count<50||(m.Reference.SchemaVersion==1&&len(m.Reference.Sections)!=5)||m.Reference.Notes==""{t.Fatal("unexpected actual reference",count)}
  hits:=SearchReference(m.Reference,"read_double")
  if len(hits)==0||hits[0].ID!="read_number"||hits[0].Variant!="double"{t.Fatal(hits)}
  ex,e:=m.Example(hits[0].ID,hits[0].Variant);if e!=nil||!strings.Contains(ex,"read_double"){t.Fatal(ex,e)}
