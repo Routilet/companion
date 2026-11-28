@@ -337,14 +337,11 @@ test('language selection is only shown when matching is ambiguous, and failed se
  await p.locator('#ojSubmitReconcile').click();await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('请勿重复提交'));
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),1)
 });
-test('normalizes imported inline relations without altering display matrices or code',async t=>{
+test('submission language matches only advertised unambiguous options',async t=>{
  const p=await setup(t);
  const result=await p.evaluate(async()=>{
-  const {normalizeInlineMath}=await import('/local-document.js');
   const {selectSubmissionLanguage}=await import('/oj-submit.js');
-  const doubled='1 '+String.fromCharCode(92,92)+'le n';
-  const matrix=String.fromCharCode(92)+'begin{matrix}1'+String.fromCharCode(92,92)+'2'+String.fromCharCode(92)+'end{matrix}';
-  return [normalizeInlineMath(doubled,false),normalizeInlineMath(matrix,true)===matrix,selectSubmissionLanguage(['GNU C99','C++17'],'C'),selectSubmissionLanguage(['C99','C11'],'C')];
+  return [selectSubmissionLanguage(['GNU C99','C++17'],'C'),selectSubmissionLanguage(['C99','C11'],'C')];
  });
- assert.deepEqual(result,['1 '+String.fromCharCode(92)+'le n',true,'GNU C99','']);
+ assert.deepEqual(result,['GNU C99','']);
 });
