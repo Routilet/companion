@@ -62,7 +62,7 @@ function matches(c:CaseResult,index:number){const current=cases[index]??{input:"
 function renderTabs(){
  const tabs=el("tabs"),scroll=tabs.scrollLeft;tabs.replaceChildren();
  const list=cases.length?cases:[{input:"",expected:null}];
- list.forEach((_,i)=>{const c=caseResult(i),b=document.createElement("button");b.className="case-tab";b.textContent=cases.length?"样例 "+(i+1):"空输入";b.setAttribute("aria-selected",String(i===selected));b.disabled=busy;
+ list.forEach((_,i)=>{const c=caseResult(i),b=document.createElement("button");b.className="case-tab ui-tab";b.textContent=cases.length?"样例 "+(i+1):"空输入";b.setAttribute("aria-selected",String(i===selected));b.disabled=busy;
  const state=c?(last?.stale||!matches(c,i)?"stale":c.state):"unrun";
  const icons:Record<string,string>={passed:"✓",mismatch:"≠",ran:"•",stale:"◷",unrun:"—"};
  const label=state==="stale"?"结果已过期":state==="unrun"?"尚未运行":labels[state]??state;
@@ -71,9 +71,9 @@ function renderTabs(){
  tabs.scrollLeft=scroll;
 }
 function renderCases(){
- renderTabs();const c=cases[selected];el("empty").hidden=!!c;el("editor").hidden=!c;
+ renderTabs();const c=cases[selected];el("empty").hidden=!!c;el("editor").hidden=!c;el("caseGrip").hidden=!c;
  input.value=c?.input??"";compare.checked=c?.expected!==null&&!!c;expected.value=c?.expected??"";
- btn("run").textContent=c?"运行本组":"空输入运行";btn("run").hidden=runningTest||cases.length<2;btn("all").textContent=cases.length?"运行全部":"运行";updateControls();renderResult();
+ btn("run").querySelector(".control-label")!.textContent=c?"运行本组":"空输入运行";btn("run").hidden=runningTest||cases.length<2;btn("all").querySelector(".control-label")!.textContent=cases.length?"运行全部":"运行";updateControls();renderResult();
 }
 function applySet(s:CaseSet){cases=s.cases??[];revision=s.revision;dirty=false;saveError="";loaded=true;selected=Math.min(selected,Math.max(0,cases.length-1));renderCases();}
 async function reload(){loaded=false;updateControls();try{applySet(await call<CaseSet>("LoadCases"));status.textContent=""}catch(e){status.textContent=String(e)}finally{updateControls()}}
@@ -81,7 +81,7 @@ async function select(nav:Nav){
  if(!nav.root)return;
  navEpoch++;clearTimeout(saveTimer);saveError="";editingExpected=false;
  if(root!==nav.root){workbench.invalidate();if(root)expansionByRoot.set(root,new Set(expanded));root=nav.root;expanded=new Set(expansionByRoot.get(root)??[root,...restoreExpansion(root)]);treeEntries.clear();seenMissing.clear()}
- el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;
+ el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;const picker=el("openMenu").querySelector("summary")!;picker.querySelector(".workspace-label")!.textContent=(root.split(/[\\/]/).filter(Boolean).at(-1)??root);picker.title=root;
  el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
  el("title").textContent=source?.name??"选择一个源文件";el("title").title=source?.path??"";el("path").hidden=false;el("path").textContent=source?source.directory.slice(root.length).replace(/^[\\/]/,"")||el("folder").textContent:root;el("path").title=source?.path??root;el("work").hidden=!source;el("fileActions").hidden=!source;el("batchSummary").textContent="";
@@ -109,10 +109,10 @@ function drawTree(){
    seen.add(e.path);let n=fileNodes.get(e.path);
    if(!n){
     const wrap=node("div","","tree-node"),row=node("div","","tree-row");
-    const b=node("button","","tree-item") as HTMLButtonElement;b.type="button";
+    const b=node("button","","tree-item ui-list-item") as HTMLButtonElement;b.type="button";
     const arrow=node("span","","tree-arrow"),icon=node("span","","tree-icon"),name=node("span","","tree-name");
     arrow.setAttribute("aria-hidden","true");icon.setAttribute("aria-hidden","true");
-    b.append(arrow,icon,name);const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.type="button";
+    b.append(arrow,icon,name);const more=node("button","","quiet tree-more ui-button ui-icon-button") as HTMLButtonElement;more.type="button";more.append(uiIcon("ellipsis"));
     const child=node("div","","branch"),judge=node("span","","tree-judge muted note");judge.title="远程评测缓存；AC 表示曾通过，不代表当前源码";row.append(b,judge,more);wrap.append(row,child);
     n={wrap,row,button:b,arrow,icon,name,more,child,judge};fileNodes.set(e.path,n)
    }
@@ -121,7 +121,7 @@ function drawTree(){
    row.classList.toggle("selected",isSelected);b.setAttribute("aria-current",String(isSelected));b.title=e.path;b.disabled=busy;
    if(e.directory)b.setAttribute("aria-expanded",String(isExpanded));else b.removeAttribute("aria-expanded");
    arrow.classList.toggle("expanded",isExpanded);arrow.classList.toggle("leaf",!e.directory);
-   icon.className="tree-icon "+(e.directory?"folder-icon":"source-icon");name.textContent=e.name;judge.textContent="";judge.hidden=true;
+   icon.className="tree-icon";icon.replaceChildren(uiIcon(e.directory?"folder-open":"file-code"));name.textContent=e.name;judge.textContent="";judge.hidden=true;
    b.onclick=()=>{if(e.directory){if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);drawTree();void refreshTree(true)}}else if(!isSelected)void navigate(async()=>select(await call<Nav>("Select",e.path)))};
    more.hidden=!e.directory&&!isSelected;more.disabled=busy;more.title=e.directory?"文件夹操作":"当前文件操作";more.setAttribute("aria-label",more.title);
    more.onclick=()=>openFileMenu(more,e);
@@ -164,9 +164,11 @@ async function refreshTree(force=false){
 async function storeConfig(){try{await call("StoreConfig",compilerByLanguage.c.trim(),compilerByLanguage.cpp.trim(),editorPath.trim())}catch(e){status.textContent="配置保存失败："+String(e)}}
 async function navigate(action:()=>Promise<void>){
  if(busy||dialogs.isOpen())return;
+ if(manual.isOpen())manual.close();
  busy=true;updateControls();drawTree();try{await save();navEpoch++;await action();await storeConfig()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();drawTree();void refreshTree(true)}
 }
 async function save(){clearTimeout(saveTimer);if(saveFlight)await saveFlight;if(!dirty)return;if(!loaded)throw Error("样例未加载，无法保存");const generation=editGeneration,path=source?.path,rev=revision,data=cases.map(c=>({...c}));saveError="";const task=(async()=>{try{const set=await call<CaseSet>("SaveCases",data,rev);if(source?.path!==path)throw Error("保存目标已变化");revision=set.revision;if(generation===editGeneration)dirty=false;else queueSave();saveError=""}catch(e){saveError=String(e);throw e}})();saveFlight=task;updateControls();try{await task}finally{if(saveFlight===task)saveFlight=undefined;updateControls()}}
+function uiIcon(name:string){const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","ui-icon");svg.setAttribute("aria-hidden","true");const use=document.createElementNS("http://www.w3.org/2000/svg","use");use.setAttribute("href","#routilet-icon-"+name);svg.append(use);return svg}
 function node(tag:string,text:string,cls=""){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;}
 function output(title:string,text:string){const d=node("div","","output-block");if(title)d.append(node("h3",title));d.append(node("pre",text||"（空输出）"));return d}
 function normalized(s:string){return s.replace(/\r\n/g,"\n").split("\n").map(l=>l.replace(/[ \t]+$/,"")).join("\n").replace(/\n+$/,"")}
@@ -231,7 +233,11 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!fileMenu.hidden){c
 fileMenu.addEventListener("click",()=>closeFileMenu());
 async function manageKit(path:string,group:string[]=[]){if(busy)return;busy=true;updateControls();try{await save();const r=await kitSwitch.run(path,group);if(r){if(source&&r.changed.includes(source.path)){last=undefined;prepared=undefined;renderCases();renderResult()}status.textContent="已切换 "+r.changed.length+" 个文件"+(r.failed.length?"；失败："+r.failed.join("；"):"")}}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
 btn("kitCurrent").onclick=()=>{if(source)void manageKit(source.path)};btn("kitRoot").onclick=()=>void manageKit(root);btn("kitContest").onclick=()=>void manageKit("",workbench.groupPaths());btn("kitFileMenu").onclick=()=>{if(menuEntry)void manageKit(menuEntry.path)};
-for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu")))d.addEventListener("click",e=>{if((e.target as HTMLElement).closest("button"))d.open=false});
+for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu"))){
+ d.addEventListener("click",e=>{if((e.target as HTMLElement).closest("button"))d.open=false});
+ const place=()=>{if(!d.open)return;const anchor=d.querySelector("summary"),menu=d.querySelector<HTMLElement>(".menuitems");if(!anchor||!menu)return;const a=anchor.getBoundingClientRect();menu.style.position="fixed";menu.style.right="auto";menu.style.maxWidth=Math.max(1,innerWidth-8)+"px";menu.style.maxHeight=Math.max(1,innerHeight-8)+"px";menu.style.overflow="auto";const w=menu.offsetWidth,h=menu.offsetHeight;menu.style.left=Math.max(4,Math.min(d.id==="openMenu"?a.left:a.right-w,innerWidth-w-4))+"px";menu.style.top=Math.max(4,Math.min(a.bottom+h<=innerHeight-4?a.bottom:a.top-h,innerHeight-h-4))+"px"};
+ d.addEventListener("toggle",place);window.addEventListener("resize",place)
+}
 el("file").addEventListener("scroll",closeFileMenu);
 window.addEventListener("resize",closeFileMenu);
 const grip=el("sidebarGrip"),shell=el("shell");
@@ -251,7 +257,7 @@ btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("Cho
 btn("refreshTree").onclick=()=>void refreshTree(true);
 btn("ojImport").onclick=()=>{void navigate(async()=>{if(!await ojAccount.requireLogin())return;const r=await ojImport.run(source?.path??"",root);if(!r)return;await select(r.nav);await syncOJWorkspace();status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"");const warning=await call<string>("KitCreationWarning");if(warning)status.textContent+="；新建 C 文件未接入 Exam Kit："+warning})};
 btn("ojOpenOriginal").onclick=async()=>{const path=source?.path;if(!path||busy)return;try{await call("OJOpenOriginal",path)}catch(e){status.textContent=String(e)}};
-btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await syncOJWorkspace();status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
+btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("取消题目关联？代码和样例不会改变。","取消关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await syncOJWorkspace();status.textContent="已取消题目关联，代码和样例已保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target){await select(await call<Nav>("Create",target.dir,target.name));if(/\.c$/i.test(target.name)){const warning=await call<string>("KitCreationWarning");if(warning)status.textContent="已创建普通 C 文件；Exam Kit 未接入："+warning}}})}
 btn("new").onclick=()=>void newFile();
 btn("newHere").onclick=()=>{const e=menuEntry;void newFile(e?.directory?e.path:source?.directory??root)};
@@ -266,7 +272,7 @@ setInterval(async()=>{
  if(!runtime)return;
  if(runningTest&&!progressCheck){progressCheck=true;try{const p=await call<Progress>("Progress");if(!runningTest)return;const bar=el<HTMLProgressElement>("progress");if(p.phase==="compiling"){bar.removeAttribute("value");el("batchSummary").textContent="正在编译…"}else if(p.phase==="running"){bar.max=Math.max(1,p.total);bar.value=p.completed;el("batchSummary").textContent="正在运行 "+p.completed+" / "+p.total+" 组"}}catch{}finally{progressCheck=false}}
  if(dropCheck)return;dropCheck=true;
- try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||dialogs.isOpen()||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||el<HTMLDialogElement>("manualDialog").open||el<HTMLDialogElement>("editorDialog").open||el<HTMLDialogElement>("ojAccountDialog").open||el<HTMLDialogElement>("kitDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
+ try{const p=await call<string[]|null>("TakeDrop");if(!p?.length)return;if(p.length!==1){status.textContent="一次仅支持拖入一个文件或文件夹";return}if(busy||dialogs.isOpen()||el<HTMLDialogElement>("preview").open||el<HTMLDialogElement>("config").open||!el("manualDialog").hidden||el<HTMLDialogElement>("editorDialog").open||el<HTMLDialogElement>("ojAccountDialog").open||el<HTMLDialogElement>("kitDialog").open){status.textContent="请结束当前操作后重新拖入";return}await navigate(async()=>select(await call<Nav>("OpenDropped",p[0])))}catch(e){status.textContent=String(e)}finally{dropCheck=false}
 },300);
 btn("observe").onclick=async()=>{
  if(busy||observing||!source||!loaded)return;
@@ -287,12 +293,12 @@ const documentReader=installDocument(call);
 const workbench=installWorkbench(call,path=>{if(path!==source?.path)void navigate(async()=>select(await call<Nav>("Select",path)))},()=>{void syncOJWorkspace();if(workbench.active())void ojAccount.enter()},()=>source?.path??"",ojStatus.mark,()=>busy);
 let workspaceEpoch=0;
 async function syncOJWorkspace(rescan=true){const n=++workspaceEpoch;if(!workbench.active()){ojImport.clearBinding();if(source){el("title").textContent=source.name;el("title").title=source.path}ojStatus.clear();return}if(ojAccount.connecting())return;if(rescan||workbench.needsScan())await workbench.scan();else workbench.draw();if(n!==workspaceEpoch||!workbench.active())return;await ojImport.refresh(source?.path??"");if(n!==workspaceEpoch||!workbench.active())return;btn("ojSubmitBtn").hidden=el("ojBinding").hidden;await ojStatus.refreshLocal();updateControls()}
-const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open);
+const manual=installManual(call,()=>!!runtime&&!busy&&!dialogs.isOpen()&&!preview.open&&!config.open&&!editorDialog.open&&!documentReader.isOpen()&&!el<HTMLDialogElement>("ojAccountDialog").open&&!el<HTMLDialogElement>("kitDialog").open&&!el<HTMLDialogElement>("ojDetailDialog").open);
 type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");
 let editorChoices:EditorOption[]=[];let editorEpoch=0;
 function editorLabel(){return editorPath==="@system"?"系统默认编辑器":editorChoices.find(e=>e.path===editorPath)?.name??editorPath.split(/[\\/]/).at(-1)?.replace(/\.(exe|app)$/i,"")??""}
-function updateEditorLabel(){btn("openEditor").textContent="编辑";btn("openEditor").title=editorPath?"打开 "+editorLabel():"打开编辑器";btn("settingsEditor").textContent=editorPath?editorLabel():"自动检测"}
+function updateEditorLabel(){btn("openEditor").querySelector(".control-label")!.textContent="打开编辑器";btn("openEditor").title=editorPath?"打开 "+editorLabel():"打开编辑器";btn("settingsEditor").textContent=editorPath?editorLabel():"自动检测"}
 async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="";return true}catch(e){status.textContent=String(e);return false}}
 async function editorMenu(openAfter:boolean){
  if(busy||(openAfter&&!source)||editorDialog.open)return;
@@ -310,8 +316,8 @@ async function editorMenu(openAfter:boolean){
 btn("openEditor").onclick=async()=>{if(!editorPath){await editorMenu(true);return}if(!await launchEditor(editorPath))await editorMenu(true)};
 btn("settingsEditor").onclick=()=>void editorMenu(false);
 btn("reveal").onclick=async()=>{try{if(menuEntry?.directory)await call("RevealFolder",menuEntry.path);else await call("Reveal")}catch(e){status.textContent=String(e)}};
-async function openSubmission(online:boolean){if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前源码与全部已通过比较的样例一致。":"当前源码未完整验证（或有未保存样例）；请核对后再复制或提交。";if(prepared.kitVersion)el("verify").textContent+=" Exam Kit "+prepared.kitVersion+" · 展开 "+(prepared.components?.length??0)+" 个组件。";el("previewTitle").textContent="复制提交源码";preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest,online,source&&language(source)==="cpp"?"C++":"C")}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
-btn("previewSource").onclick=()=>void openSubmission(false);btn("copy").onclick=async()=>{if(busy||!source)return;busy=true;updateControls();try{const p=await call<Submission>("Prepare",compiler.value.trim());await call("CopyPrepared",compiler.value.trim(),p.digest);status.textContent=p.verified&&!dirty?"已复制":"已复制；当前源码未完整验证"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};btn("ojSubmitBtn").onclick=async()=>{if(busy||!source)return;const path=source.path;if(!await ojAccount.requireLogin()||busy||source?.path!==path||!workbench.active())return;void openSubmission(true)};
+async function openSubmission(online:boolean){if(busy)return;busy=true;updateControls();try{prepared=await call<Submission>("Prepare",compiler.value.trim());el<HTMLTextAreaElement>("sourcePreview").value=prepared.text;el("verify").textContent=prepared.verified&&!dirty?"当前代码已通过全部样例比较。":"当前代码尚未通过全部样例验证，仍可继续。";el("previewTitle").textContent=online?"提交代码":"查看提交源码";el<HTMLDetailsElement>("sourcePreviewDetails").open=!online;btn("copyConfirm").hidden=online;btn("closePreview").textContent=online?"取消":"关闭";preview.classList.toggle("online-submit",online);preview.showModal();void ojSubmit.open(compiler.value.trim(),prepared.digest,online,source&&language(source)==="cpp"?"C++":"C")}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
+btn("previewSource").onclick=()=>void openSubmission(false);btn("copy").onclick=async()=>{if(busy||!source)return;busy=true;updateControls();try{const p=await call<Submission>("Prepare",compiler.value.trim());await call("CopyPrepared",compiler.value.trim(),p.digest);status.textContent=p.verified&&!dirty?"已复制代码":"已复制代码；当前代码尚未通过全部样例验证"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};btn("ojSubmitBtn").onclick=async()=>{if(busy||!source)return;const path=source.path;if(!await ojAccount.requireLogin()||busy||source?.path!==path||!workbench.active())return;void openSubmission(true)};
 btn("closePreview").onclick=()=>{prepared=undefined;preview.close()};
 preview.onclose=()=>{prepared=undefined};
 btn("copyConfirm").onclick=async()=>{if(!prepared)return;btn("copyConfirm").disabled=true;try{await call("CopyPrepared",compiler.value.trim(),prepared.digest);preview.close();status.textContent="已复制当前提交源码"}catch(e){preview.close();status.textContent=String(e)}finally{btn("copyConfirm").disabled=false}};
@@ -322,6 +328,17 @@ let lastAccountKey="";async function syncOJVisibility(){try{const a=await call<P
 config.addEventListener("close",()=>{void syncOJVisibility()});
 async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true;updateControls();try{if(await ojAccount.requireLogin())await ojStatus.refresh(paths)}finally{busy=false;updateControls()}}
 btn("ojRefreshTree").onclick=()=>{void refreshOJ(workbench.groupPaths())};
+btn("ojRefreshMaterials").onclick=()=>{
+ const paths=workbench.materialPaths();if(!paths.length||busy)return;
+ void navigate(async()=>{
+  if(!await dialogs.confirm("从 Accoding 重新获取当前比赛已导入的题面和样例。变化的资料将先备份，再以在线版本替换；源码不变。","更新"))return;
+  if(!await ojAccount.requireLogin())return;
+  status.textContent="正在更新比赛题面与样例…";
+  const r=await call<{updated:string[];unchanged:string[];skipped:string[];failed:string[];backups:string[];missing:number}>("OJRefreshMaterials",paths);
+  if(source&&paths.includes(source.path)){last=undefined;prepared=undefined;await reload();await documentReader.refresh(source.path)}
+  status.textContent="更新 "+r.updated.length+" 题，未变化 "+r.unchanged.length+" 题"+(r.missing?"；另有 "+r.missing+" 道在线题目尚未导入":"")+(r.skipped.length?"；保留 "+r.skipped.length+" 项："+r.skipped.join("；"):"")+(r.failed.length?"；失败 "+r.failed.length+" 项："+r.failed.join("；"):"")+(r.backups.length?"；原资料已备份至各题 .companion/refresh-backups":"")+"。";
+ });
+};
 btn("ojRefreshCurrent").onclick=()=>{if(source)void refreshOJ([source.path])};
 
 let preferenceFlight:Promise<void>=Promise.resolve();function savePreferences(){const c=el<HTMLInputElement>("cc").value.trim(),cpp=el<HTMLInputElement>("cxx").value.trim();preferenceFlight=preferenceFlight.then(async()=>{if(c===compilerByLanguage.c&&cpp===compilerByLanguage.cpp)return;try{await call("StoreConfig",c,cpp,editorPath.trim());compilerByLanguage.c=c;compilerByLanguage.cpp=cpp;if(source)compiler.value=compilerByLanguage[language(source)];markStale();el("configNotice").hidden=true}catch(e){el("configNotice").textContent="保存失败："+String(e);el("configNotice").hidden=false}});return preferenceFlight}el<HTMLInputElement>("cc").onchange=()=>void savePreferences();el<HTMLInputElement>("cxx").onchange=()=>void savePreferences();
@@ -337,7 +354,12 @@ btn("save").onclick=async()=>{busy=true;updateControls();try{await save()}catch(
 btn("run").onclick=()=>void run(false);btn("all").onclick=()=>void run(true);
 btn("cancel").onclick=async()=>{btn("cancel").disabled=true;try{await call("Cancel")}catch(e){status.textContent=String(e)}};
 window.addEventListener("focus",async()=>{if(last&&!busy&&!dirty){const id=last.runId;try{if(!(await call<boolean>("IsCurrent",compiler.value.trim()))&&last?.runId===id)markStale()}catch{markStale()}}});
-document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!editorDialog.open&&!el<HTMLDialogElement>("ojAccountDialog").open&&!el<HTMLDialogElement>("kitDialog").open&&!manual.isOpen()&&!documentReader.isOpen()&&!(el<HTMLDialogElement>("ojDetailDialog").open)){e.preventDefault();void run(true)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!manual.isOpen()&&!preview.open&&!config.open&&!editorDialog.open&&!el<HTMLDialogElement>("ojAccountDialog").open&&!el<HTMLDialogElement>("kitDialog").open&&!documentReader.isOpen()&&!el<HTMLDialogElement>("ojDetailDialog").open&&!busy){e.preventDefault();void manual.open()}});
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!busy&&!dialogs.isOpen()&&source&&!preview.open&&!config.open&&!editorDialog.open&&!el<HTMLDialogElement>("ojAccountDialog").open&&!el<HTMLDialogElement>("kitDialog").open&&!manual.isOpen()&&!documentReader.isOpen()&&!(el<HTMLDialogElement>("ojDetailDialog").open)){e.preventDefault();void run(true)}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="h"&&!dialogs.isOpen()&&!preview.open&&!config.open&&!editorDialog.open&&!el<HTMLDialogElement>("ojAccountDialog").open&&!el<HTMLDialogElement>("kitDialog").open&&!documentReader.isOpen()&&!el<HTMLDialogElement>("ojDetailDialog").open&&!busy){e.preventDefault();if(manual.isOpen())manual.close();else void manual.open()}});
 window.addEventListener("beforeunload",e=>{if(dirty||saveFlight){e.preventDefault();e.returnValue=""}});
 async function boot(){try{const path="/wails/runtime.js";runtime=await import(path) as Runtime;if(typeof runtime.Call?.ByName!=="function")throw Error("运行时不可用");el("appVersion").textContent="v"+await call<string>("Version");const cfg=await call<Settings>("Config");compilerByLanguage.c=cfg.c;compilerByLanguage.cpp=cfg.cpp;editorPath=cfg.editor;updateEditorLabel();status.textContent="";updateControls();await select(await call<Nav>("Initial"));const warning=await call<string>("ConfigWarning");if(warning)status.textContent="配置读取失败："+warning;void call("OJCheckAdapter").then(syncOJVisibility).catch(()=>{})}catch(e){runtime=undefined;status.textContent="无法连接本地应用："+String(e);updateControls()}}
 void boot();
+
+const caseGrip=el("caseGrip"),workArea=el("work");let inputShare=0.34;
+function resizeInput(share:number){inputShare=Math.max(0.15,Math.min(0.72,share));workArea.style.setProperty("--input-share",String(inputShare));caseGrip.setAttribute("aria-valuenow",String(Math.round(inputShare*100)))}
+caseGrip.onpointerdown=e=>{caseGrip.setPointerCapture(e.pointerId);const y=e.clientY,start=inputShare,h=Math.max(150,workArea.clientHeight-100);caseGrip.onpointermove=ev=>resizeInput(start+(ev.clientY-y)/h);caseGrip.onlostpointercapture=()=>{caseGrip.onpointermove=null}};
+caseGrip.onkeydown=e=>{if(e.key==="ArrowUp"||e.key==="ArrowDown"){e.preventDefault();resizeInput(inputShare+(e.key==="ArrowDown"?0.05:-0.05))}};resizeInput(inputShare);

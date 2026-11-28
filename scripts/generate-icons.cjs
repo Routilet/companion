@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {Resvg}=require(path.resolve('out/icon-tools/node_modules/@resvg/resvg-js'));
-const source=fs.readFileSync('desktop/frontend/icons/companion.svg','utf8');
+const source=fs.readFileSync('desktop/frontend/ui/brand/companion.svg','utf8');
 const out='out/icons';fs.mkdirSync(out,{recursive:true});
 const cache=new Map();
 function png(size){

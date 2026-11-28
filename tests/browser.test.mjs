@@ -50,8 +50,10 @@ async function setup(t){
    case 'KitStatus':return {version:'0.6.10',path:''};case 'KitCreationWarning':return '';
    case 'ObserverStatus':return {available:false};
    case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
-   case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:['C']},title:'测试题',label:'A',nickname:'fixture'};
-   case 'OJSendSubmission':return {id:'12',result:'AC',accountId:'7',language:'C'};
+   case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:state.ojLanguages??['C']},title:'测试题',label:'A',nickname:'fixture'};
+   case 'OJRefreshMaterials':return {updated:args[0],unchanged:[],skipped:[],failed:[],backups:[],missing:0};
+   case 'OJReconcileSubmission':return {state:'unresolved'};
+   case 'OJSendSubmission':if(state.failSend)throw Error('网络中断');return {id:'12',result:'AC',accountId:'7',language:'C'};
    case 'Version':return '0.1.0';
    case 'Config':return {c:'',cpp:'',editor:'',root,selected:'A.c'};
    case 'ConfigWarning':return '';
@@ -201,7 +203,7 @@ test('manual preserves version-scoped reading state and copies a signature',asyn
  await p.getByRole('button',{name:'复制函数接口'}).click();
  await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='CopyManualSignature'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='CopyManualSignature')),['CopyManualSignature','read_number','','fixture-v1','int read_int(void);']);
- await p.locator('#manualClose').click();await p.locator('#manualBtn').click();
+ const side=await p.locator('.sidebar').boundingBox();assert.equal(await p.locator('#shell').isVisible(),true);assert.equal(await p.locator('#workspace').isVisible(),false);assert.equal(await p.locator('#manualSidebar').isVisible(),true);assert.equal(await p.locator('#workbenchSidebar').isVisible(),false);await p.locator('#workbenchBtn').click();assert.equal(await p.locator('#workspace').isVisible(),true);assert.equal(await p.locator('#manualSidebar').isVisible(),false);assert.deepEqual(await p.locator('.sidebar').boundingBox(),side);await p.locator('#manualBtn').click();
  await p.waitForFunction(()=>document.querySelector('#manualDetail h2')?.textContent==='读取数字'&&!document.querySelector('#manualSearch').disabled);
  assert.equal(await p.locator('#manualNav details').getAttribute('open'),'');
  await p.locator('#manualSearch').fill('读取');await p.waitForFunction(()=>document.querySelector('#manualNav [data-entry] small'));
@@ -222,22 +224,22 @@ test('OJ cached state survives keyed tree refresh, explicit refresh is the only 
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges').length),0);
  await p.locator('.tree-item').filter({hasText:'B.c'}).click();await p.waitForFunction(()=>document.querySelector('#title').textContent==='B.c'&&!document.querySelector('#new').disabled);
  await p.locator('.tree-item').filter({hasText:'A.c'}).click();await p.waitForFunction(()=>!document.querySelector('#new').disabled);await p.locator('#ojMode').click();await p.waitForFunction(()=>!document.querySelector('#ojBinding').hidden);
- assert.match(await p.locator('#ojJudgeText').textContent(),/曾 AC.*WA/);
+ assert.match(await p.locator('#ojJudgeText').textContent(),/曾通过.*WA/);
  await p.locator('#ojDetailBtn').click();await p.locator('#ojRefreshCurrent').click();await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshJudges'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshJudges')), [['OJRefreshJudges',['/work/A.c']]]);
  await p.locator('#ojDetailClose').click();await p.waitForFunction(()=>!document.querySelector('#ojUnbind').disabled);
  await p.locator('#sourceMenu summary').click();await p.locator('#ojUnbind').click();await p.locator('#actionAccept').click();await p.waitForFunction(()=>document.querySelector('#ojBinding').hidden&&!document.querySelector('.tree-judge:not([hidden])'));
 });
 
-test('online submission in unified preview requires explicit language and confirmation',async t=>{
+test('online submission auto-selects language but still requires explicit confirmation',async t=>{
  const p=await setup(t);
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'problemset'}}});
  await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitConfirm').waitFor();
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),0);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJPrepareSubmission').length),1);
  assert.equal(await p.locator('#ojSubmitLanguage').inputValue(),'C');assert.equal(await p.locator('#ojSubmitConfirm').isEnabled(),true);
- await p.locator('#ojSubmitLanguage').selectOption('C');await p.locator('#ojSubmitConfirm').click();
- await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('#12'));
+ assert.equal(await p.locator('#ojLanguageChoice').isVisible(),false);assert.equal(await p.locator('#sourcePreview').isVisible(),false);assert.equal(await p.locator('#ojSubmitReconcile').isVisible(),false);await p.locator('#ojSubmitConfirm').click();
+ await p.locator('#preview').waitFor({state:'hidden'});
  assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission')), [['OJSendSubmission','','fixture-digest','fixture-token','C']]);
 });
 
@@ -319,4 +321,57 @@ test('import preview and apply show indeterminate progress, block dismissal, and
  await p.evaluate(()=>fixture.finishApply());await p.locator('#ojImportProgress').waitFor({state:'hidden'});
  await p.waitForFunction(()=>document.querySelector('#status').textContent.includes('导入完成 1 题')&&!document.querySelector('#ojImport').disabled);
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJApplyImport').length),1);
+});
+
+test('opening menu stays inside the viewport',async t=>{
+ const p=await setup(t);
+ await p.locator('#openMenu summary').click();
+ const box=await p.locator('#openMenu .menuitems').boundingBox();
+ assert.ok(box.x>=0&&box.x+box.width<=1100);
+});
+test('language selection is only shown when matching is ambiguous, and failed send cannot retry blindly',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'problemset'}};fixture.ojLanguages=['GNU C99','C11'];fixture.failSend=true});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitConfirm').waitFor();
+ assert.equal(await p.locator('#ojSubmitConfirm').isEnabled(),false);assert.equal(await p.locator('#ojLanguageChoice').isVisible(),true);
+ await p.locator('#ojSubmitLanguage').selectOption('GNU C99');await p.locator('#ojSubmitConfirm').click();await p.locator('#ojSubmitReconcile').waitFor();assert.equal(await p.locator('#ojSubmitConfirm').isVisible(),false);
+ await p.locator('#ojSubmitReconcile').click();await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('请勿重复提交'));
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),1)
+});
+test('submission language matches only advertised unambiguous options',async t=>{
+ const p=await setup(t);
+ const result=await p.evaluate(async()=>{
+  const {selectSubmissionLanguage}=await import('/oj-submit.js');
+  return [selectSubmissionLanguage(['GNU C99','C++17'],'C'),selectSubmissionLanguage(['C99','C11'],'C')];
+ });
+ assert.deepEqual(result,['GNU C99','']);
+});
+
+test('contest material refresh is explicit and only affects selected group',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'contest',contestId:'42',problemId:'5'}}});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#contestMenu summary').click();await p.locator('#ojRefreshMaterials').click();await p.locator('#actionCancel').click();
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshMaterials').length),0);
+ await p.waitForFunction(()=>!document.querySelector('#ojRefreshMaterials').disabled);
+ await p.locator('#contestMenu summary').click();await p.locator('#ojRefreshMaterials').click();await p.locator('#actionAccept').click();
+ await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshMaterials'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshMaterials')),[['OJRefreshMaterials',['/work/A.c']]]);
+});
+
+
+test('shared design snapshot renders unique inline icons and stable shell',async t=>{
+ const p=await setup(t);
+ assert.deepEqual(await p.evaluate(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.filter((v,i)=>ids.indexOf(v)!==i)}),[]);
+ assert.ok(await p.evaluate(()=>[...document.querySelectorAll('svg.ui-icon use')].every(u=>document.getElementById(u.getAttribute('href').slice(1)))));
+ const start=await p.locator('.sidebar').boundingBox();
+ await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);
+ assert.deepEqual(await p.locator('.sidebar').boundingBox(),start);
+ await p.locator('#workbenchBtn').click();assert.deepEqual(await p.locator('.sidebar').boundingBox(),start);
+ await p.emulateMedia({colorScheme:'dark'});
+ assert.equal(await p.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),'dark');
+ await p.setViewportSize({width:680,height:600});
+ assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await p.locator('#openMenu summary').click();
+ const menu=await p.locator('#openMenu .menuitems').boundingBox();
+ assert.ok(menu.x>=0&&menu.x+menu.width<=680&&menu.y>=0&&menu.y+menu.height<=600);
 });
