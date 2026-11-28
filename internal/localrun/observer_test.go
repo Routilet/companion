@@ -78,3 +78,16 @@ func TestObserverCapabilityBackendNames(t *testing.T){
   if e:=validateObserverCapabilities(c,"0.2.0",v.platform,v.arch,v.selector);e==nil{t.Fatal("session selector confused with backend capability ID")}
  }
 }
+
+func TestObserverCapabilitiesAcrossReleases(t *testing.T){
+ for _,version:=range []string{"0.2.0","0.3.0-beta.1","1.0.0","2.0.0"}{
+  c:=observerCapabilities{Version:version,Platform:"darwin",Arch:"arm64",Backends:[]string{"lldb-dap"},SessionSchemaVersions:[]int{1,2},SessionFeatures:[]string{"backend","comparison","future"}}
+  if e:=validateObserverCapabilities(c,"","darwin","arm64","lldb");e!=nil{t.Fatalf("%s: %v",version,e)}
+  if e:=validateObserverCapabilities(c,version,"darwin","arm64","lldb");e!=nil{t.Fatal(e)}
+  if version!="0.2.0"{if e:=validateObserverCapabilities(c,"0.2.0","darwin","arm64","lldb");e==nil{t.Fatal("manifest version mismatch accepted")}}
+  c.SessionSchemaVersions=[]int{2};if e:=validateObserverCapabilities(c,"","darwin","arm64","lldb");e==nil{t.Fatal("unsupported session accepted")}
+  c.SessionSchemaVersions=[]int{1};c.SessionFeatures=[]string{"backend"};if e:=validateObserverCapabilities(c,"","darwin","arm64","lldb");e==nil{t.Fatal("missing comparison accepted")}
+  c.SessionFeatures=[]string{"backend","comparison"};if e:=validateObserverCapabilities(c,"","windows","amd64","gdb");e==nil{t.Fatal("wrong platform accepted")}
+  c.Version="";if e:=validateObserverCapabilities(c,"","darwin","arm64","lldb");e==nil{t.Fatal("empty identity accepted")}
+ }
+}
