@@ -4,6 +4,7 @@ import (
  "context"
  "os"
  "path/filepath"
+ "strings"
  "testing"
 
  "github.com/Routilet/companion/internal/localrun"
@@ -109,4 +110,30 @@ func TestArchiveNameAndLegacyDirectoryReuse(t *testing.T){
  if e=os.Rename(path,filepath.Join(d.root,"contest-42"));e!=nil{t.Fatal(e)}
  plan,e=d.OJPreviewImportAt("fixture",".c",false,d.root);if e!=nil||plan.Plan.CanRename||plan.Plan.FolderName!="contest-42"||plan.Plan.Rows[0].Action!="skip"{t.Fatal(plan,e)}
  plan,e=d.OJPreviewImportAt("fixture",".c",false,filepath.Join(d.root,"contest-42"));if e!=nil||plan.Plan.Rows[0].Name!=filepath.Join("A","A.c"){t.Fatal(plan,e)}
+}
+
+
+func TestRefreshContestMaterials(t *testing.T){
+ p:=importProblem("5","A");p.Statement="旧题面"
+ d,a:=importDesktop(t,p)
+ preview,e:=d.OJPreviewImportAt("fixture",".cpp",false,d.root);if e!=nil{t.Fatal(e)}
+ if r,e:=d.OJApplyImport(preview.Token);e!=nil||len(r.Completed)!=1{t.Fatal(r,e)}
+ path:=d.selected.Path
+ code:=[]byte("int main(){return 17;}\n");if e=os.WriteFile(path,code,0600);e!=nil{t.Fatal(e)}
+ old,e:=localrun.ReadDocument(d.root,path);if e!=nil||old==nil{t.Fatal(old,e)}
+ cs,e:=localrun.LoadCases(path);if e!=nil{t.Fatal(e)}
+ custom:="mine";if _,e=localrun.SaveCases(path,[]localrun.Case{{Input:"custom",Expected:&custom}},cs.Revision);e!=nil{t.Fatal(e)}
+ a.result.Problems[0].Statement="新题面"
+ a.result.Problems[0].Samples=[]ojadapter.Sample{{Input:"3",Expected:"4"}}
+ r,e:=d.OJRefreshMaterials([]string{path});if e!=nil||len(r.Updated)!=1||len(r.Backups)!=1||len(r.Failed)!=0{t.Fatal(r,e)}
+ after,e:=localrun.ReadDocument(d.root,path);if e!=nil||after.Content!=a.result.Problems[0].Markdown(){t.Fatal(after,e)}
+ saved,e:=localrun.LoadCases(path);if e!=nil||len(saved.Cases)!=1||saved.Cases[0].Input!="3"{t.Fatal(saved,e)}
+ raw,e:=os.ReadFile(filepath.Join(r.Backups[0],old.Name));if e!=nil||string(raw)!=old.Content{t.Fatal(string(raw),e)}
+ raw,e=os.ReadFile(filepath.Join(r.Backups[0],"cases.json"));if e!=nil||!strings.Contains(string(raw),"custom"){t.Fatal(string(raw),e)}
+ raw,e=os.ReadFile(path);if e!=nil||string(raw)!=string(code){t.Fatal("source changed",e)}
+ r,e=d.OJRefreshMaterials([]string{path});if e!=nil||len(r.Unchanged)!=1||len(r.Backups)!=0{t.Fatal(r,e)}
+ a.result.Problems[0].Samples=nil;a.result.Problems[0].Warnings=[]string{"样例无法配对"}
+ a.result.Problems[0].Statement="再次更新"
+ r,e=d.OJRefreshMaterials([]string{path});if e!=nil||len(r.Updated)!=1||len(r.Skipped)!=1{t.Fatal(r,e)}
+ current,e:=localrun.LoadCases(path);if e!=nil||current.Revision!=saved.Revision{t.Fatal(current,e)}
 }
