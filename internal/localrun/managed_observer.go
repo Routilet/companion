@@ -23,6 +23,6 @@ func ProbeManagedObserver(manager string)(ObserverInfo,error){
  if p.State!="ok"{return ObserverInfo{},fmt.Errorf("Observer 不可用，请在 Routilet 安装或检查版本: %s %s",p.State,p.Stderr)}
  var c observerCapabilities
  if e=json.Unmarshal([]byte(p.Stdout),&c);e!=nil{return ObserverInfo{},fmt.Errorf("Observer 能力响应无效: %w",e)}
- if e=validateObserverCapabilities(c,"0.2.0",runtime.GOOS,runtime.GOARCH,backend);e!=nil{return ObserverInfo{},e}
+ if e=validateObserverCapabilities(c,"",runtime.GOOS,runtime.GOARCH,backend);e!=nil{return ObserverInfo{},e}
  return ObserverInfo{Version:c.Version,Executable:manager,Backend:backend,Managed:true},nil
 }
