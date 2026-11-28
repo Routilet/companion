@@ -231,8 +231,8 @@ jobs:
           fi
   publish:
     needs: [package, installed, frontend, managed-adapter]
-    # Explicitly authorized 0.2.0-beta.1 test release; other versions require dispatch.
-    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && (needs.package.outputs.version == '0.1.0' || needs.package.outputs.version == '0.2.0-beta.1')))
+    # Authorized 0.2.0-beta.1 and beta.2 test releases; other versions require dispatch.
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && (needs.package.outputs.version == '0.1.0' || needs.package.outputs.version == '0.2.0-beta.1' || needs.package.outputs.version == '0.2.0-beta.2')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -254,7 +254,7 @@ jobs:
           sha256sum -c SHA256SUMS
           archive="$(find . -maxdepth 1 -name '*.tgz' -print -quit)"
           version="$(tar -xOzf "$archive" package/package.json | jq -er .version)"
-          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0 && "$version" != 0.2.0-beta.1 ]]; then exit 1; fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$version" != 0.1.0 && "$version" != 0.2.0-beta.1 && "$version" != 0.2.0-beta.2 ]]; then exit 1; fi
           if [[ "$version" == *-* ]]; then tag=next; else tag=latest; fi
           if [[ "$version" == 0.1.0 ]]; then
             for spec in @routilet/routilet@0.1.8 @routilet/accoding-adapter@0.1.0 @routilet/c-exam-kit@0.6.10; do
@@ -277,7 +277,7 @@ jobs:
           if [[ "$version" == 0.1.0 ]]; then
             test "$(npm view @routilet/accoding-adapter dist-tags.latest --registry=https://registry.npmjs.org/)" = 0.1.0
           fi
-          if [[ "$version" == 0.2.0-beta.1 ]]; then
+          if [[ "$version" == 0.2.0-beta.1 || "$version" == 0.2.0-beta.2 ]]; then
             test "$tag" = next
             code="$(curl --silent --show-error --output /tmp/companion-beta-version.json --write-out '%{http_code}' "https://registry.npmjs.org/@routilet%2fcompanion/$version")"
             case "$code" in

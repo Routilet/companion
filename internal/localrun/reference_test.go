@@ -61,3 +61,13 @@ func TestActualKitReference(t *testing.T){
  ex,e:=m.Example(hits[0].ID,hits[0].Variant);if e!=nil||!strings.Contains(ex,"read_double"){t.Fatal(ex,e)}
  t.Logf("actual reference %s: %d entries, %d sections",m.Reference.Version,count,len(m.Reference.Sections))
 }
+
+func TestFlatReferenceCompatibility(t *testing.T){
+ m,e:=LoadManual("",referenceFixture(t,"0.6.10"));if e!=nil{t.Fatal(e)}
+ r:=m.Reference;entry:=r.Categories[0].Entries[0];entry.Tags=[]string{"数字","输入"};entry.Summary="读取数字";entry.Keywords=[]string{"从标准输入"};entry.Related=nil
+ r=Reference{SchemaVersion:2,Version:r.Version,Notes:r.Notes,Tags:[]string{"数字","输入"},Entries:[]ReferenceEntry{entry}}
+ raw,_:=json.Marshal(r);got,e:=ParseReference(raw,r.Version);if e!=nil{t.Fatal(e)}
+ if len(got.AllEntries())!=1||len(SearchReference(got,"从标准输入"))!=1{t.Fatal("flat not preferred")}
+ hits:=SearchReference(got,"read_double");if len(hits)!=1||hits[0].Variant!="double"{t.Fatal(hits)}
+ r.Entries[0].Tags=[]string{"不存在"};raw,_=json.Marshal(r);if _,e=ParseReference(raw,r.Version);e==nil{t.Fatal("unknown flat tag accepted")}
+}

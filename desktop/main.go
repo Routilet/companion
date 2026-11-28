@@ -100,10 +100,10 @@ func(d *Desktop) CopyManualSignature(id,key,fingerprint,signature string)error{
  m,e:=d.loadManual()
  if e!=nil||m.Fingerprint!=fingerprint||m.Origin!=d.manual.Origin||m.SourcePath!=d.manual.SourcePath{d.mu.Unlock();return errors.New("资源或当前文件已变化，请重新打开手册")}
  valid:=false
- for _,c:=range m.Reference.Categories{for _,entry:=range c.Entries{if entry.ID!=id{continue};signatures:=entry.Signatures
+ for _,entry:=range m.Reference.AllEntries(){if entry.ID!=id{continue};signatures:=entry.Signatures
   if len(entry.Variants)>0{signatures=nil;for _,v:=range entry.Variants{if v.Key==key{signatures=append(append([]string{},entry.CommonSignatures...),v.Signatures...);break}}}
   for _,s:=range signatures{if s==signature{valid=true}}
- }}
+ }
  d.mu.Unlock();if !valid{return errors.New("未知函数接口")}
  if !d.native.Clipboard.SetText(signature){return errors.New("无法写入系统剪贴板")};return nil
 }

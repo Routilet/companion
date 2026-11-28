@@ -7,6 +7,7 @@ import (
  "fmt"
  "strings"
  "sort"
+ "regexp"
 )
 
 type ReferenceVariant struct {
@@ -18,7 +19,15 @@ type ReferenceVariant struct {
  Note string `json:"note"`
  Example string `json:"example"`
 }
+type ReferenceParameter struct { Name string `json:"name"`; Description string `json:"description"` }
 type ReferenceEntry struct {
+ Tags []string `json:"tags,omitempty"`
+ Summary string `json:"summary,omitempty"`
+ Parameters []ReferenceParameter `json:"parameters,omitempty"`
+ Returns string `json:"returns,omitempty"`
+ Requirements []string `json:"requirements,omitempty"`
+ Errors []string `json:"errors,omitempty"`
+ Complexity string `json:"complexity,omitempty"`
  ID string `json:"id"`
  Title string `json:"title"`
  Description string `json:"description"`
@@ -40,6 +49,8 @@ type ReferenceSection struct {
  Entries []string `json:"entries,omitempty"`
 }
 type Reference struct {
+ Tags []string `json:"tags,omitempty"`
+ Entries []ReferenceEntry `json:"entries,omitempty"`
  SchemaVersion int `json:"schemaVersion"`
  Version string `json:"version"`
  Notes string `json:"notes"`
@@ -55,7 +66,9 @@ type Manual struct {
 func ParseReference(raw []byte,version string)(Reference,error){
  var r Reference
  if e:=json.Unmarshal(raw,&r);e!=nil{return r,e}
- if r.SchemaVersion!=1||r.Version!=version||len(r.Categories)==0{return r,errors.New("函数手册格式或版本无效")}
+ if r.Version!=version{return r,errors.New("函数手册版本无效")}
+ if r.SchemaVersion==2{return validateFlat(r)}
+ if r.SchemaVersion!=1||len(r.Categories)==0{return r,errors.New("函数手册格式或版本无效")}
  ids:=map[string]ReferenceEntry{}
  for _,c:=range r.Categories{
   if strings.TrimSpace(c.Title)==""||len(c.Entries)==0{return r,errors.New("函数手册分类无效")}
@@ -82,9 +95,36 @@ func ParseReference(raw []byte,version string)(Reference,error){
  }
  if e:=visit(r.Sections,0);e!=nil{return r,e}
  if len(seen)!=len(ids){return r,errors.New("函数手册目录缺少条目")}
+ r.Entries=nil;r.Tags=nil
+ paths:=map[string][]string{}
+ var collect func([]ReferenceSection,[]string)
+ collect=func(nodes []ReferenceSection,parents []string){for _,n:=range nodes{tags:=append(append([]string{},parents...),n.Title);for _,id:=range n.Entries{paths[id]=tags};collect(n.Children,tags)}}
+ collect(r.Sections,nil)
+ for _,c:=range r.Categories{for _,e:=range c.Entries{e.Tags=paths[e.ID];if len(e.Tags)==0{e.Tags=[]string{c.Title}};r.Entries=append(r.Entries,e)}}
  return r,nil
 }
 
+// Read native flat schema v2; historical v1 resources remain readable.
+func validateFlat(r Reference)(Reference,error){
+ if r.SchemaVersion!=2||len(r.Entries)==0||len(r.Entries)>4096||len(r.Tags)==0||len(r.Tags)>128{return r,errors.New("函数手册 v2 格式无效")}
+ tags:=map[string]bool{};for _,tag:=range r.Tags{if strings.TrimSpace(tag)==""||tags[tag]{return r,errors.New("重复或空手册标签")};tags[tag]=true}
+ ids:=map[string]bool{}
+ for _,e:=range r.Entries{
+  if !kitID.MatchString(e.ID)||ids[e.ID]||strings.TrimSpace(e.Title)==""||strings.TrimSpace(e.Summary)==""||len(e.Signatures)==0||len(e.Tags)==0{return r,fmt.Errorf("函数手册 v2 条目无效: %s",e.ID)}
+  ids[e.ID]=true;used:=map[string]bool{}
+  for _,tag:=range e.Tags{if !tags[tag]||used[tag]{return r,fmt.Errorf("无效手册标签: %s",tag)};used[tag]=true}
+  keys:=map[string]bool{};for _,v:=range e.Variants{if v.Key==""||v.Label==""||keys[v.Key]||len(v.Symbols)==0||len(v.Signatures)==0{return r,errors.New("无效函数变体")};keys[v.Key]=true}
+  params:=map[string]bool{};for _,p:=range e.Parameters{if !kitID.MatchString(p.Name)||strings.TrimSpace(p.Description)==""||params[p.Name]{return r,errors.New("无效参数说明")};params[p.Name]=true}
+ }
+ for _,e:=range r.Entries{for _,id:=range e.Related{if id==e.ID||!ids[id]{return r,fmt.Errorf("无效相关条目: %s",id)}}}
+ return r,nil
+}
+func(r Reference) AllEntries()[]ReferenceEntry{
+ if len(r.Entries)>0{return r.Entries}
+ var out []ReferenceEntry
+ for _,c:=range r.Categories{for _,e:=range c.Entries{if len(e.Tags)==0{e.Tags=[]string{c.Title}};out=append(out,e)}}
+ return out
+}
 // Reference selection is independent of successful assembly/compilation.
 // A student can consult the correct manual even while editing broken C.
 func manualKit(path,packageRoot string)(Kit,string,error){
@@ -123,7 +163,7 @@ func LoadManual(path,packageRoot string)(Manual,error){
  return m,nil
 }
 func(m Manual) Example(id,key string)(string,error){
- for _,c:=range m.Reference.Categories{for _,e:=range c.Entries{if e.ID!=id{continue}
+ for _,e:=range m.Reference.AllEntries(){if e.ID!=id{continue}
   example:=e.Example
   if len(e.Variants)>0{
    found:=false
@@ -132,7 +172,7 @@ func(m Manual) Example(id,key string)(string,error){
   }else if key!=""{return "",errors.New("条目没有类型变体")}
   if example==""{return "",errors.New("此条目没有调用示例")}
   return example,nil
- }}
+ }
  return "",errors.New("未知手册条目")
 }
 type ReferenceHit struct{
@@ -143,27 +183,27 @@ type ReferenceHit struct{
 }
 // Search is local, deterministic, and matches exact function names before
 // partial names, Chinese titles, and descriptive text.
+var referenceSymbol=regexp.MustCompile(`([A-Za-z_]\w*)\s*\(`)
 func SearchReference(r Reference,q string)[]ReferenceHit{
  q=strings.ToLower(strings.TrimSpace(q));hits:=[]ReferenceHit{}
  if q==""{return hits}
  terms:=strings.Fields(q)
- for _,c:=range r.Categories{for _,e:=range c.Entries{
-  hay:=[]string{e.ID,e.Title,e.Description,c.Title}
-  hay=append(hay,e.Signatures...);hay=append(hay,e.Keywords...)
-  score:=3;key:=""
+ for _,e:=range r.AllEntries(){
+  hay:=[]string{e.ID,e.Title,e.Summary,e.Description,e.Returns,e.Complexity}
+  hay=append(hay,e.Tags...);hay=append(hay,e.Signatures...);hay=append(hay,e.Keywords...);hay=append(hay,e.Requirements...);hay=append(hay,e.Errors...)
+  for _,p:=range e.Parameters{hay=append(hay,p.Name,p.Description)}
+  score:=5;key:=""
   if strings.ToLower(e.ID)==q{score=0}
-  for _,v:=range e.Variants{
-   hay=append(hay,v.Symbols...);hay=append(hay,v.Label,v.Note)
-   for _,s:=range v.Symbols{
-    s=strings.ToLower(s)
-    if s==q{key=v.Key;score=0}else if strings.Contains(s,q)&&score>1{key=v.Key;score=1}
-   }
-  }
+  match:=func(s,v string){s=strings.ToLower(s);if s==q{if score>0||key==""{score=0;key=v}}else if strings.Contains(s,q)&&score>1{score=1;key=v}}
+  for _,v:=range e.Variants{hay=append(hay,v.Symbols...);hay=append(hay,v.Label,v.Note);for _,s:=range v.Symbols{match(s,v.Key)}}
+  for _,s:=range e.Signatures{if m:=referenceSymbol.FindStringSubmatch(s);len(m)>1{match(m[1],"")}}
   if score>2&&strings.Contains(strings.ToLower(e.Title),q){score=2}
-  text:=strings.ToLower(strings.Join(hay," "));ok:=true
-  for _,t:=range terms{if !strings.Contains(text,t){ok=false;break}}
-  if ok{hits=append(hits,ReferenceHit{e.ID,key,c.Title,score})}
- }}
+  for _,s:=range e.Keywords{if score>3&&strings.Contains(strings.ToLower(s),q){score=3}}
+  for _,s:=range e.Tags{if score>4&&strings.Contains(strings.ToLower(s),q){score=4}}
+  body:=strings.ToLower(strings.Join(hay," "));ok:=true
+  for _,t:=range terms{if !strings.Contains(body,t){ok=false;break}}
+  if ok{hits=append(hits,ReferenceHit{e.ID,key,strings.Join(e.Tags," · "),score})}
+ }
  sort.SliceStable(hits,func(i,j int)bool{return hits[i].Score<hits[j].Score})
  return hits
 }
