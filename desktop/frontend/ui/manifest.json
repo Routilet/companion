@@ -1,10 +1,10 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "source": "Routilet/ui",
-  "sourceCommit": "144a863117c051291cf8988e1d2e1fa4e0fd31f1",
+  "sourceCommit": "ce59b0ed4c13b87e02ff44f84633dc023a834d39",
   "algorithm": "sha256",
   "files": {
-    "routilet.css": "5dcdf4b0edb9ea12dc6ea8f0311f6199d9f975e3ca26e8b9e0d5dc228ce02d98",
+    "routilet.css": "e7000aa099e44eb7a9ae7380f87f00f6d5fb72602c43efe68419b1ecbf1cee94",
     "icons/sprite.svg": "d38b1c1f0a724d7bcd25cdf6a6422018b3a2f3ab9c010052ff75d29f8a5b6dbe",
     "icons/LICENSE": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc",
     "icons/semantics.json": "9f44f9123aff5f0bd43850ddc3ba703aa60dc25f5b8847831c4650c0121721db",
