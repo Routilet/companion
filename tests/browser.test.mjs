@@ -51,6 +51,7 @@ async function setup(t){
    case 'ObserverStatus':return {available:false};
    case 'Prepare':return {source:source(state.name),text:'int main(void){return 0;}',digest:'fixture-digest',verified:false};
    case 'OJPrepareSubmission':return {plan:{token:'fixture-token',target:{kind:'problemset',problemId:'42'},accountId:'7',languages:state.ojLanguages??['C']},title:'测试题',label:'A',nickname:'fixture'};
+   case 'OJRefreshMaterials':return {updated:args[0],unchanged:[],skipped:[],failed:[],backups:[],missing:0};
    case 'OJReconcileSubmission':return {state:'unresolved'};
    case 'OJSendSubmission':if(state.failSend)throw Error('网络中断');return {id:'12',result:'AC',accountId:'7',language:'C'};
    case 'Version':return '0.1.0';
@@ -344,4 +345,15 @@ test('submission language matches only advertised unambiguous options',async t=>
   return [selectSubmissionLanguage(['GNU C99','C++17'],'C'),selectSubmissionLanguage(['C99','C11'],'C')];
  });
  assert.deepEqual(result,['GNU C99','']);
+});
+
+test('contest material refresh is explicit and only affects selected group',async t=>{
+ const p=await setup(t);
+ await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'contest',contestId:'42',problemId:'5'}}});
+ await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#contestMenu summary').click();await p.locator('#ojRefreshMaterials').click();await p.locator('#actionCancel').click();
+ assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshMaterials').length),0);
+ await p.waitForFunction(()=>!document.querySelector('#ojRefreshMaterials').disabled);
+ await p.locator('#contestMenu summary').click();await p.locator('#ojRefreshMaterials').click();await p.locator('#actionAccept').click();
+ await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='OJRefreshMaterials'));
+ assert.deepEqual(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJRefreshMaterials')),[['OJRefreshMaterials',['/work/A.c']]]);
 });
