@@ -6,7 +6,7 @@ if(manifest.algorithm!=='sha256'||manifest.version!=='0.1.0')throw Error('Unsupp
 await mkdir('dist',{recursive:true});
 await copyFile('style.css','dist/style.css');
 await cp('ui','dist/ui',{recursive:true});
-const sprite=(await readFile('ui/icons/sprite.svg','utf8')).replace('<svg xmlns="http://www.w3.org/2000/svg">','<svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">');
+const sprite=(await readFile('ui/icons/sprite.svg','utf8')).replace('<svg xmlns="http://www.w3.org/2000/svg">','<svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">').replace(/<symbol id="([^"]+)"/g,(_,name)=>'<symbol id="routilet-icon-'+name+'"');
 const html=await readFile('index.html','utf8');if(!html.includes('<!-- ROUTILET_UI_SPRITE -->'))throw Error('Missing UI sprite marker');
 await writeFile('dist/index.html',html.replace('<!-- ROUTILET_UI_SPRITE -->',()=>sprite));
 
