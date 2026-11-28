@@ -8,7 +8,10 @@ await copyFile('style.css','dist/style.css');
 await cp('ui','dist/ui',{recursive:true});
 const sprite=(await readFile('ui/icons/sprite.svg','utf8')).replace('<svg xmlns="http://www.w3.org/2000/svg">','<svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">').replace(/<symbol id="([^"]+)"/g,(_,name)=>'<symbol id="routilet-icon-'+name+'"');
 const html=await readFile('index.html','utf8');if(!html.includes('<!-- ROUTILET_UI_SPRITE -->'))throw Error('Missing UI sprite marker');
-await writeFile('dist/index.html',html.replace('<!-- ROUTILET_UI_SPRITE -->',()=>sprite));
+const document=html.replace('<!-- ROUTILET_UI_SPRITE -->',()=>sprite);
+const ids=[...document.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);if(new Set(ids).size!==ids.length)throw Error('Duplicate HTML or SVG ID');
+for(const m of document.matchAll(/<use href="#([^"]+)"/g))if(!ids.includes(m[1]))throw Error('Unresolved icon: '+m[1]);
+await writeFile('dist/index.html',document);
 
 await mkdir('dist/icons',{recursive:true});
 await copyFile('ui/brand/companion.svg','dist/icons/companion.svg');
