@@ -231,7 +231,11 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!fileMenu.hidden){c
 fileMenu.addEventListener("click",()=>closeFileMenu());
 async function manageKit(path:string,group:string[]=[]){if(busy)return;busy=true;updateControls();try{await save();const r=await kitSwitch.run(path,group);if(r){if(source&&r.changed.includes(source.path)){last=undefined;prepared=undefined;renderCases();renderResult()}status.textContent="已切换 "+r.changed.length+" 个文件"+(r.failed.length?"；失败："+r.failed.join("；"):"")}}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}}
 btn("kitCurrent").onclick=()=>{if(source)void manageKit(source.path)};btn("kitRoot").onclick=()=>void manageKit(root);btn("kitContest").onclick=()=>void manageKit("",workbench.groupPaths());btn("kitFileMenu").onclick=()=>{if(menuEntry)void manageKit(menuEntry.path)};
-for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu")))d.addEventListener("click",e=>{if((e.target as HTMLElement).closest("button"))d.open=false});
+for(const d of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.menu"))){
+ d.addEventListener("click",e=>{if((e.target as HTMLElement).closest("button"))d.open=false});
+ const place=()=>{if(!d.open)return;const anchor=d.querySelector("summary"),menu=d.querySelector<HTMLElement>(".menuitems");if(!anchor||!menu)return;const a=anchor.getBoundingClientRect();menu.style.position="fixed";menu.style.right="auto";menu.style.maxWidth=Math.max(1,innerWidth-8)+"px";menu.style.maxHeight=Math.max(1,innerHeight-8)+"px";menu.style.overflow="auto";const w=menu.offsetWidth,h=menu.offsetHeight;menu.style.left=Math.max(4,Math.min(d.id==="openMenu"?a.left:a.right-w,innerWidth-w-4))+"px";menu.style.top=Math.max(4,Math.min(a.bottom+h<=innerHeight-4?a.bottom:a.top-h,innerHeight-h-4))+"px"};
+ d.addEventListener("toggle",place);window.addEventListener("resize",place)
+}
 el("file").addEventListener("scroll",closeFileMenu);
 window.addEventListener("resize",closeFileMenu);
 const grip=el("sidebarGrip"),shell=el("shell");
@@ -251,7 +255,7 @@ btn("openFolder").onclick=()=>void navigate(async()=>select(await call<Nav>("Cho
 btn("refreshTree").onclick=()=>void refreshTree(true);
 btn("ojImport").onclick=()=>{void navigate(async()=>{if(!await ojAccount.requireLogin())return;const r=await ojImport.run(source?.path??"",root);if(!r)return;await select(r.nav);await syncOJWorkspace();status.textContent=`导入完成 ${r.completed.length} 题，跳过 ${r.skipped.length} 题，失败 ${r.failed.length} 题。`+(r.failed.length?" "+r.failed.join("；"):"");const warning=await call<string>("KitCreationWarning");if(warning)status.textContent+="；新建 C 文件未接入 Exam Kit："+warning})};
 btn("ojOpenOriginal").onclick=async()=>{const path=source?.path;if(!path||busy)return;try{await call("OJOpenOriginal",path)}catch(e){status.textContent=String(e)}};
-btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("解除题目关联？源码和样例不变。","解除关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await syncOJWorkspace();status.textContent="已解除题目关联；源码和样例保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
+btn("ojUnbind").onclick=async()=>{const path=source?.path;if(!path||busy||!await dialogs.confirm("取消题目关联？代码和样例不会改变。","取消关联")||source?.path!==path)return;busy=true;updateControls();try{await call("OJUnbind",path);await syncOJWorkspace();status.textContent="已取消题目关联，代码和样例已保留。"}catch(e){status.textContent=String(e)}finally{busy=false;updateControls()}};
 function newFile(dir=root){return navigate(async()=>{const target=await dialogs.create(dir,()=>call<string>("ChooseCreateDirectory"));if(target){await select(await call<Nav>("Create",target.dir,target.name));if(/\.c$/i.test(target.name)){const warning=await call<string>("KitCreationWarning");if(warning)status.textContent="已创建普通 C 文件；Exam Kit 未接入："+warning}}})}
 btn("new").onclick=()=>void newFile();
 btn("newHere").onclick=()=>{const e=menuEntry;void newFile(e?.directory?e.path:source?.directory??root)};
