@@ -4,12 +4,6 @@ declare global {interface Window {markdownit:(options:Record<string,unknown>)=>a
 type Call=<T>(method:string,...args:unknown[])=>Promise<T>;
 type DocumentData={name:string;content:string};
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
-// Some imported inline formulas contain a doubled escape before common
-// relation commands. Do not rewrite display math or multi-line environments.
-export function normalizeInlineMath(value:string,display:boolean):string{
- if(display||/\\(?:begin|end)\s*\{|[\r\n]/.test(value))return value;
- return value.replace(/\\\\(leqslant|geqslant|leq|geq|le|ge|sim|neq|ne|lt|gt|approx|times|cdot|pm|in|notin)(?=\s|[0-9{}_^]|$)/g,"\\$1");
-}
 export function installDocument(call:Call){
  const button=el<HTMLButtonElement>("documentBtn"),dialog=el<HTMLDialogElement>("documentDialog"),body=el("documentBody");
  let data:DocumentData|null=null,epoch=0;
@@ -30,7 +24,7 @@ export function installDocument(call:Call){
    state.pos=end+close.length;return true
   });
   md.renderer.rules.local_math=(tokens:any[],i:number)=>{
-   try{return window.katex.renderToString(normalizeInlineMath(tokens[i].content,tokens[i].meta.display),{displayMode:tokens[i].meta.display,throwOnError:true,trust:false,maxExpand:300,maxSize:10,strict:"ignore"})}catch{return md.utils.escapeHtml(tokens[i].content)}
+   try{return window.katex.renderToString(tokens[i].content,{displayMode:tokens[i].meta.display,throwOnError:true,trust:false,maxExpand:300,maxSize:10,strict:"ignore"})}catch{return md.utils.escapeHtml(tokens[i].content)}
   };
   // Rendering is confined to a single inert article. Markdown-it escapes all
   // source HTML; generated links and images are deliberately replaced above.
