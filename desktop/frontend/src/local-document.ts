@@ -4,6 +4,12 @@ declare global {interface Window {markdownit:(options:Record<string,unknown>)=>a
 type Call=<T>(method:string,...args:unknown[])=>Promise<T>;
 type DocumentData={name:string;content:string};
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
+// Some imported inline formulas contain a doubled escape before common
+// relation commands. Do not rewrite display math or multi-line environments.
+export function normalizeInlineMath(value:string,display:boolean):string{
+ if(display||/\\(?:begin|end)\s*\{|[\r\n]/.test(value))return value;
+ return value.replace(/\\\\(leqslant|geqslant|leq|geq|le|ge|sim|neq|ne|lt|gt|approx|times|cdot|pm|in|notin)(?=\s|[0-9{}_^]|$)/g,"\\$1");
+}
 export function installDocument(call:Call){
  const button=el<HTMLButtonElement>("documentBtn"),dialog=el<HTMLDialogElement>("documentDialog"),body=el("documentBody");
  let data:DocumentData|null=null,epoch=0;
@@ -24,7 +30,7 @@ export function installDocument(call:Call){
    state.pos=end+close.length;return true
   });
   md.renderer.rules.local_math=(tokens:any[],i:number)=>{
-   try{return window.katex.renderToString(tokens[i].content,{displayMode:tokens[i].meta.display,throwOnError:false,trust:false,maxExpand:300,maxSize:10,strict:"ignore"})}catch{return md.utils.escapeHtml(tokens[i].content)}
+   try{return window.katex.renderToString(normalizeInlineMath(tokens[i].content,tokens[i].meta.display),{displayMode:tokens[i].meta.display,throwOnError:true,trust:false,maxExpand:300,maxSize:10,strict:"ignore"})}catch{return md.utils.escapeHtml(tokens[i].content)}
   };
   // Rendering is confined to a single inert article. Markdown-it escapes all
   // source HTML; generated links and images are deliberately replaced above.
@@ -34,7 +40,7 @@ export function installDocument(call:Call){
   const n=++epoch;data=null;button.hidden=true;el("title").classList.remove("document-link");if(!path)return;
   try{const d=await call<DocumentData|null>("ReadLocalDocument");if(n===epoch){data=d;button.hidden=!d;el("title").classList.toggle("document-link",!!d);el("title").title=d?"阅读题面 / 文档":""}}catch{/* optional local document, ordinary testing unaffected */}
  }
- button.onclick=async()=>{try{const d=await call<DocumentData|null>("ReadLocalDocument");if(!d)return;data=d;el("documentTitle").textContent=data.name;body.replaceChildren();try{body.innerHTML=render(data.content)}catch{const pre=document.createElement("pre");pre.textContent=data.content;body.append(pre)}dialog.showModal()}catch(e){body.textContent=String(e);dialog.showModal()}};
+ button.onclick=async()=>{try{const d=await call<DocumentData|null>("ReadLocalDocument");if(!d)return;data=d;el("documentTitle").textContent=el("title").textContent||data.name;body.replaceChildren();body.scrollTop=0;try{body.innerHTML=render(data.content)}catch{const pre=document.createElement("pre");pre.textContent=data.content;body.append(pre)}dialog.showModal()}catch(e){body.textContent=String(e);dialog.showModal()}};
  el("documentClose").onclick=()=>dialog.close();
  return {refresh,isOpen:()=>dialog.open}
 }
