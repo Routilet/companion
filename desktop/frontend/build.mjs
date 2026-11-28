@@ -1,9 +1,17 @@
-import {copyFile,mkdir,cp} from 'node:fs/promises';
+import {copyFile,mkdir,cp,readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const manifest=JSON.parse(await readFile('ui/manifest.json','utf8'));
+for(const [name,hash] of Object.entries(manifest.files)){if(createHash('sha256').update(await readFile('ui/'+name)).digest('hex')!==hash)throw Error('UI snapshot mismatch: '+name)}
+if(manifest.algorithm!=='sha256'||manifest.version!=='0.1.0')throw Error('Unsupported UI snapshot');
 await mkdir('dist',{recursive:true});
-for(const name of ['index.html','style.css']) await copyFile(name,'dist/'+name);
+await copyFile('style.css','dist/style.css');
+await cp('ui','dist/ui',{recursive:true});
+const sprite=(await readFile('ui/icons/sprite.svg','utf8')).replace('<svg xmlns="http://www.w3.org/2000/svg">','<svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">');
+const html=await readFile('index.html','utf8');if(!html.includes('<!-- ROUTILET_UI_SPRITE -->'))throw Error('Missing UI sprite marker');
+await writeFile('dist/index.html',html.replace('<!-- ROUTILET_UI_SPRITE -->',()=>sprite));
 
 await mkdir('dist/icons',{recursive:true});
-await copyFile('icons/companion.svg','dist/icons/companion.svg');
+await copyFile('ui/brand/companion.svg','dist/icons/companion.svg');
 
 await mkdir('dist/vendor',{recursive:true});
 for(const [pkg,name] of [['markdown-it','markdown-it.min.js'],['katex','katex.min.js'],['katex','katex.min.css']])await copyFile('node_modules/'+pkg+'/dist/'+name,'dist/vendor/'+name);
