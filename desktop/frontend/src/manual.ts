@@ -112,7 +112,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
   if(!dialog.hidden||!canOpen())return;
   const session=++generation;queryEpoch++;search.disabled=true;setStatus("正在读取本地资源…");dialog.hidden=false;el("shell").hidden=true;el("manualBtn").setAttribute("aria-pressed","true");el("workbenchBtn").setAttribute("aria-pressed","false");
   try{const m=await call<Manual>("OpenManual");if(session!==generation||dialog.hidden)return;
-   if(model?.fingerprint===m.fingerprint){search.disabled=false;setStatus("");if(search.value.trim())void searchNow();return}model=m;clear();search.value="";entries=new Map(m.reference.categories.flatMap(c=>c.entries.map(e=>[e.id,e] as const)));
+   if(model?.fingerprint===m.fingerprint){search.disabled=false;setStatus("");const previous=saved.get(m.fingerprint);if(search.value.trim())await searchNow();if(session===generation&&!dialog.hidden&&previous){detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}return}model=m;clear();search.value="";entries=new Map(m.reference.categories.flatMap(c=>c.entries.map(e=>[e.id,e] as const)));
    version.textContent="Exam Kit "+m.reference.version+(m.origin==="snapshot"?" · 当前文件资源快照":" · 已安装资源")+" · "+entries.size+" 项";
    const previous=saved.get(m.fingerprint);openSections=new Set(previous?.expanded??[]);tree();if(previous?.id&&entries.has(previous.id)){show(previous.id,previous.key);detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}else notes();search.disabled=false;setStatus("");search.focus()
   }catch(e){if(session===generation&&!dialog.hidden){model=undefined;entries.clear();clear();search.value="";version.textContent="";setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
