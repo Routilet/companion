@@ -62,7 +62,7 @@ function matches(c:CaseResult,index:number){const current=cases[index]??{input:"
 function renderTabs(){
  const tabs=el("tabs"),scroll=tabs.scrollLeft;tabs.replaceChildren();
  const list=cases.length?cases:[{input:"",expected:null}];
- list.forEach((_,i)=>{const c=caseResult(i),b=document.createElement("button");b.className="case-tab";b.textContent=cases.length?"样例 "+(i+1):"空输入";b.setAttribute("aria-selected",String(i===selected));b.disabled=busy;
+ list.forEach((_,i)=>{const c=caseResult(i),b=document.createElement("button");b.className="case-tab ui-tab";b.textContent=cases.length?"样例 "+(i+1):"空输入";b.setAttribute("aria-selected",String(i===selected));b.disabled=busy;
  const state=c?(last?.stale||!matches(c,i)?"stale":c.state):"unrun";
  const icons:Record<string,string>={passed:"✓",mismatch:"≠",ran:"•",stale:"◷",unrun:"—"};
  const label=state==="stale"?"结果已过期":state==="unrun"?"尚未运行":labels[state]??state;
@@ -73,7 +73,7 @@ function renderTabs(){
 function renderCases(){
  renderTabs();const c=cases[selected];el("empty").hidden=!!c;el("editor").hidden=!c;el("caseGrip").hidden=!c;
  input.value=c?.input??"";compare.checked=c?.expected!==null&&!!c;expected.value=c?.expected??"";
- btn("run").textContent=c?"运行本组":"空输入运行";btn("run").hidden=runningTest||cases.length<2;btn("all").textContent=cases.length?"运行全部":"运行";updateControls();renderResult();
+ btn("run").querySelector(".control-label")!.textContent=c?"运行本组":"空输入运行";btn("run").hidden=runningTest||cases.length<2;btn("all").querySelector(".control-label")!.textContent=cases.length?"运行全部":"运行";updateControls();renderResult();
 }
 function applySet(s:CaseSet){cases=s.cases??[];revision=s.revision;dirty=false;saveError="";loaded=true;selected=Math.min(selected,Math.max(0,cases.length-1));renderCases();}
 async function reload(){loaded=false;updateControls();try{applySet(await call<CaseSet>("LoadCases"));status.textContent=""}catch(e){status.textContent=String(e)}finally{updateControls()}}
@@ -109,10 +109,10 @@ function drawTree(){
    seen.add(e.path);let n=fileNodes.get(e.path);
    if(!n){
     const wrap=node("div","","tree-node"),row=node("div","","tree-row");
-    const b=node("button","","tree-item") as HTMLButtonElement;b.type="button";
+    const b=node("button","","tree-item ui-list-item") as HTMLButtonElement;b.type="button";
     const arrow=node("span","","tree-arrow"),icon=node("span","","tree-icon"),name=node("span","","tree-name");
     arrow.setAttribute("aria-hidden","true");icon.setAttribute("aria-hidden","true");
-    b.append(arrow,icon,name);const more=node("button","⋯","quiet tree-more") as HTMLButtonElement;more.type="button";
+    b.append(arrow,icon,name);const more=node("button","","quiet tree-more ui-button ui-icon-button") as HTMLButtonElement;more.type="button";more.append(uiIcon("ellipsis"));
     const child=node("div","","branch"),judge=node("span","","tree-judge muted note");judge.title="远程评测缓存；AC 表示曾通过，不代表当前源码";row.append(b,judge,more);wrap.append(row,child);
     n={wrap,row,button:b,arrow,icon,name,more,child,judge};fileNodes.set(e.path,n)
    }
@@ -121,7 +121,7 @@ function drawTree(){
    row.classList.toggle("selected",isSelected);b.setAttribute("aria-current",String(isSelected));b.title=e.path;b.disabled=busy;
    if(e.directory)b.setAttribute("aria-expanded",String(isExpanded));else b.removeAttribute("aria-expanded");
    arrow.classList.toggle("expanded",isExpanded);arrow.classList.toggle("leaf",!e.directory);
-   icon.className="tree-icon "+(e.directory?"folder-icon":"source-icon");name.textContent=e.name;judge.textContent="";judge.hidden=true;
+   icon.className="tree-icon";icon.replaceChildren(uiIcon(e.directory?"folder-open":"file-code"));name.textContent=e.name;judge.textContent="";judge.hidden=true;
    b.onclick=()=>{if(e.directory){if(expanded.has(e.path)){expanded.delete(e.path);drawTree()}else{expanded.add(e.path);drawTree();void refreshTree(true)}}else if(!isSelected)void navigate(async()=>select(await call<Nav>("Select",e.path)))};
    more.hidden=!e.directory&&!isSelected;more.disabled=busy;more.title=e.directory?"文件夹操作":"当前文件操作";more.setAttribute("aria-label",more.title);
    more.onclick=()=>openFileMenu(more,e);
@@ -164,9 +164,11 @@ async function refreshTree(force=false){
 async function storeConfig(){try{await call("StoreConfig",compilerByLanguage.c.trim(),compilerByLanguage.cpp.trim(),editorPath.trim())}catch(e){status.textContent="配置保存失败："+String(e)}}
 async function navigate(action:()=>Promise<void>){
  if(busy||dialogs.isOpen())return;
+ if(manual.isOpen())manual.close();
  busy=true;updateControls();drawTree();try{await save();navEpoch++;await action();await storeConfig()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();drawTree();void refreshTree(true)}
 }
 async function save(){clearTimeout(saveTimer);if(saveFlight)await saveFlight;if(!dirty)return;if(!loaded)throw Error("样例未加载，无法保存");const generation=editGeneration,path=source?.path,rev=revision,data=cases.map(c=>({...c}));saveError="";const task=(async()=>{try{const set=await call<CaseSet>("SaveCases",data,rev);if(source?.path!==path)throw Error("保存目标已变化");revision=set.revision;if(generation===editGeneration)dirty=false;else queueSave();saveError=""}catch(e){saveError=String(e);throw e}})();saveFlight=task;updateControls();try{await task}finally{if(saveFlight===task)saveFlight=undefined;updateControls()}}
+function uiIcon(name:string){const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","ui-icon");svg.setAttribute("aria-hidden","true");const use=document.createElementNS("http://www.w3.org/2000/svg","use");use.setAttribute("href","#"+name);svg.append(use);return svg}
 function node(tag:string,text:string,cls=""){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;}
 function output(title:string,text:string){const d=node("div","","output-block");if(title)d.append(node("h3",title));d.append(node("pre",text||"（空输出）"));return d}
 function normalized(s:string){return s.replace(/\r\n/g,"\n").split("\n").map(l=>l.replace(/[ \t]+$/,"")).join("\n").replace(/\n+$/,"")}
@@ -296,7 +298,7 @@ type EditorOption={name:string;path:string};
 const editorDialog=el<HTMLDialogElement>("editorDialog");
 let editorChoices:EditorOption[]=[];let editorEpoch=0;
 function editorLabel(){return editorPath==="@system"?"系统默认编辑器":editorChoices.find(e=>e.path===editorPath)?.name??editorPath.split(/[\\/]/).at(-1)?.replace(/\.(exe|app)$/i,"")??""}
-function updateEditorLabel(){btn("openEditor").textContent="打开编辑器";btn("openEditor").title=editorPath?"打开 "+editorLabel():"打开编辑器";btn("settingsEditor").textContent=editorPath?editorLabel():"自动检测"}
+function updateEditorLabel(){btn("openEditor").querySelector(".control-label")!.textContent="打开编辑器";btn("openEditor").title=editorPath?"打开 "+editorLabel():"打开编辑器";btn("settingsEditor").textContent=editorPath?editorLabel():"自动检测"}
 async function launchEditor(path:string){try{await call("OpenEditor",path);editorPath=path;updateEditorLabel();await storeConfig();status.textContent="";return true}catch(e){status.textContent=String(e);return false}}
 async function editorMenu(openAfter:boolean){
  if(busy||(openAfter&&!source)||editorDialog.open)return;
