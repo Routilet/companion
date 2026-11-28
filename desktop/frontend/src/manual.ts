@@ -7,7 +7,7 @@ type Hit={id:string;variant?:string;category:string};
 type Call=<T>(method:string,...args:unknown[])=>Promise<T>;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const node=(tag:string,text="",cls="")=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n};
-const button=(text:string,action:()=>void)=>{const b=document.createElement("button");b.textContent=text;b.type="button";b.onclick=action;return b};
+const button=(text:string,action:()=>void)=>{const b=document.createElement("button");b.textContent=text;b.type="button";b.className="ui-button";b.onclick=action;return b};
 function inline(parent:HTMLElement,text:string){
  // Only the inline syntax used in resource prose. Never interpret HTML or URLs.
  const pattern=/(\x60[^\x60\n]+\x60|\*\*[^*\n]+\*\*)/g;
@@ -87,7 +87,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
   const e=entries.get(id);if(!e)return node("span",id);
   const b=button(e.title,()=>{trail=[];show(id,key)});b.dataset.entry=id;b.title=category||e.id;if(category){const v=e.variants?.find(v=>v.key===key);b.append(node("small",v?.symbols.join(" · ")??e.id),node("small",category))}return b
  }
- function categoryPage(n:Section){current="";currentKey="";trail=[];highlight();detail.replaceChildren(node("h2",n.title),node("p","选择所需操作，查看函数接口与示例。","muted"));const walk=(s:Section)=>{if(s!==n)detail.append(node("h3",s.title));for(const id of s.entries??[]){const e=entries.get(id);if(!e)continue;const b=button(e.title,()=>show(id));b.className="category-entry";const brief=e.description.split(/\r?\n/).find(l=>l.trim()&&!l.startsWith("#"))??"";b.append(node("small",brief.slice(0,120)));detail.append(b)}for(const child of s.children??[])walk(child)};walk(n);detail.scrollTop=0}
+ function categoryPage(n:Section){current="";currentKey="";trail=[];highlight();detail.replaceChildren(node("h2",n.title),node("p","选择所需操作，查看函数接口与示例。","muted"));const walk=(s:Section)=>{if(s!==n)detail.append(node("h3",s.title));for(const id of s.entries??[]){const e=entries.get(id);if(!e)continue;const b=button(e.title,()=>show(id));b.className="ui-button category-entry";const brief=e.description.split(/\r?\n/).find(l=>l.trim()&&!l.startsWith("#"))??"";b.append(node("small",brief.slice(0,120)));detail.append(b)}for(const child of s.children??[])walk(child)};walk(n);detail.scrollTop=0}
  function tree(){
   if(!model)return;nav.replaceChildren(button("使用约定",notes));
   function section(n:Section,key:string):HTMLElement{
@@ -110,7 +110,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
  }
  async function open(){
   if(!dialog.hidden||!canOpen())return;
-  const session=++generation;queryEpoch++;search.disabled=true;setStatus("正在读取本地资源…");dialog.hidden=false;el("shell").hidden=true;el("manualBtn").setAttribute("aria-pressed","true");el("workbenchBtn").setAttribute("aria-pressed","false");
+  const session=++generation;queryEpoch++;search.disabled=true;setStatus("正在读取本地资源…");dialog.hidden=false;el("workspace").hidden=true;el("workbenchSidebar").hidden=true;el("manualSidebar").hidden=false;el("manualBtn").setAttribute("aria-pressed","true");el("workbenchBtn").setAttribute("aria-pressed","false");
   try{const m=await call<Manual>("OpenManual");if(session!==generation||dialog.hidden)return;
    if(model?.fingerprint===m.fingerprint){search.disabled=false;setStatus("");const previous=saved.get(m.fingerprint);if(search.value.trim())await searchNow();if(session===generation&&!dialog.hidden&&previous){detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}return}model=m;clear();search.value="";entries=new Map(m.reference.categories.flatMap(c=>c.entries.map(e=>[e.id,e] as const)));
    version.textContent="Exam Kit "+m.reference.version+(m.origin==="snapshot"?" · 当前文件资源快照":" · 已安装资源")+" · "+entries.size+" 项";
@@ -118,15 +118,11 @@ export function installManual(call:Call,canOpen:()=>boolean){
   }catch(e){if(session===generation&&!dialog.hidden){model=undefined;entries.clear();clear();search.value="";version.textContent="";setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
  }
  el<HTMLButtonElement>("manualBtn").onclick=()=>void open();
- function close(){if(dialog.hidden)return;if(model)saved.set(model.fingerprint,{id:current,key:currentKey,scroll:detail.scrollTop,navScroll:nav.scrollTop,expanded:[...openSections]});generation++;queryEpoch++;dialog.hidden=true;el("shell").hidden=false;el("manualBtn").setAttribute("aria-pressed","false");el("workbenchBtn").setAttribute("aria-pressed","true")}
+ function close(){if(dialog.hidden)return;if(model)saved.set(model.fingerprint,{id:current,key:currentKey,scroll:detail.scrollTop,navScroll:nav.scrollTop,expanded:[...openSections]});generation++;queryEpoch++;dialog.hidden=true;el("workspace").hidden=false;el("workbenchSidebar").hidden=false;el("manualSidebar").hidden=true;el("manualBtn").setAttribute("aria-pressed","false");el("workbenchBtn").setAttribute("aria-pressed","true")}
  el<HTMLButtonElement>("workbenchBtn").onclick=close;
  search.oninput=()=>void searchNow();
  search.onkeydown=e=>{if(!search.value.trim())return;const hits=Array.from(nav.querySelectorAll<HTMLButtonElement>("[data-entry]"));if(!hits.length)return;if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();keyboardIndex=Math.max(0,Math.min(hits.length-1,keyboardIndex+(e.key==="ArrowDown"?1:-1)));hits.forEach((b,i)=>b.classList.toggle("keyboard-hit",i===keyboardIndex));hits[keyboardIndex].scrollIntoView({block:"nearest"})}if(e.key==="Enter"){e.preventDefault();hits[Math.max(0,keyboardIndex)]?.click()}};
- const grip=el("manualGrip"),layout=grip.parentElement!;let width=240;
- function resize(w:number){width=Math.max(150,Math.min(420,w));layout.style.setProperty("--manual-width",width+"px");grip.setAttribute("aria-valuenow",String(width))}
- grip.onkeydown=e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();resize(width+(e.key==="ArrowRight"?12:-12))}};
- grip.onpointerdown=e=>{grip.setPointerCapture(e.pointerId);const x=e.clientX,start=width;grip.onpointermove=ev=>resize(start+ev.clientX-x);grip.onlostpointercapture=()=>{grip.onpointermove=null}};
- dialog.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){e.preventDefault();search.focus();search.select()}});
+ document.addEventListener("keydown",e=>{if(!dialog.hidden&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){e.preventDefault();search.focus();search.select()}});
  
  return {open,close,isOpen:()=>!dialog.hidden}
 }
