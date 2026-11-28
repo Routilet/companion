@@ -43,15 +43,25 @@ export function installManual(call:Call,canOpen:()=>boolean){
  const dialog=el("manualDialog"),search=el<HTMLInputElement>("manualSearch"),nav=el("manualNav"),detail=el("manualDetail"),status=el("manualStatus"),version=el("manualVersion");
  let model:Manual|undefined,entries=new Map<string,Entry>(),generation=0,queryEpoch=0,current="",currentKey="";
  const saved=new Map<string,{id:string;key:string;scroll:number;navScroll:number;query:string;tags:string[]}>();let selectedTags=new Set<string>();let keyboardIndex=-1;
- const filter=el<HTMLDetailsElement>("manualFilter"),tagPanel=el("manualTags"),chosen=el("manualSelectedTags"),count=el("manualCount");
+ const filter=el<HTMLButtonElement>("manualFilter"),filterText=el("manualFilterText"),panel=el("manualTagPopup"),tagPanel=el("manualTags"),count=el("manualCount");
+ const popup=(window as unknown as {RoutiletUI:{open:(a:HTMLElement,p:HTMLElement,onClose?:()=>void)=>boolean;close:(restore?:boolean)=>void;position:()=>void}}).RoutiletUI;
  function toggleTag(t:string){if(selectedTags.has(t))selectedTags.delete(t);else selectedTags.add(t);renderTags();void searchNow()}
  function renderTags(){
   const tags=[...new Set([...entries.values()].flatMap(e=>e.tags??[]))].sort((a,b)=>a.localeCompare(b,"zh-CN"));
-  tagPanel.replaceChildren();chosen.replaceChildren();filter.hidden=!tags.length;
-  filter.querySelector("summary")!.textContent=selectedTags.size?selectedTags.size+" 个标签":"全部标签";
-  for(const t of tags){const b=button(t,()=>toggleTag(t));b.setAttribute("aria-pressed",String(selectedTags.has(t)));tagPanel.append(b)}
-  for(const t of selectedTags){const b=button(t+" ×",()=>toggleTag(t));b.setAttribute("aria-label","移除标签 "+t);chosen.append(b)}
-  chosen.hidden=!selectedTags.size;
+  const focused=(document.activeElement as HTMLElement)?.dataset.tag;
+  tagPanel.replaceChildren();filter.hidden=!tags.length;
+  filterText.textContent=selectedTags.size?[...selectedTags].join("、"):"全部标签";filter.title=filterText.textContent;
+  el<HTMLButtonElement>("manualClearTags").disabled=!selectedTags.size;
+  for(const t of tags){const b=button(t,()=>toggleTag(t));b.dataset.tag=t;b.classList.add("manual-tag-option");b.setAttribute("aria-pressed",String(selectedTags.has(t)));const mark=node("span",selectedTags.has(t)?"✓":"","tag-check");mark.setAttribute("aria-hidden","true");b.prepend(mark);tagPanel.append(b);if(focused===t&&!panel.hidden)b.focus({preventScroll:true})}
+  if(!panel.hidden)popup.position()
+ }
+ filter.onclick=()=>{if(popup.open(filter,panel))tagPanel.querySelector<HTMLButtonElement>("[aria-pressed=true],button")?.focus({preventScroll:true})};
+ el<HTMLButtonElement>("manualClearTags").onclick=()=>{selectedTags.clear();renderTags();void searchNow();el<HTMLButtonElement>("manualDoneTags").focus()};
+ el<HTMLButtonElement>("manualDoneTags").onclick=()=>popup.close(true);
+ function copyAction(label:string,action:()=>Promise<unknown>){
+  const b=button("",()=>{b.disabled=true;void action().then(()=>{b.dataset.copied="true";text.textContent="已复制";use.setAttribute("href","#routilet-icon-check");setTimeout(()=>{delete b.dataset.copied;text.textContent="复制";use.setAttribute("href","#routilet-icon-copy")},1200)}).catch(err=>setStatus(String(err))).finally(()=>{b.disabled=false})});
+  b.classList.add("ui-copy");b.setAttribute("aria-label",label);
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"),use=document.createElementNS(svg.namespaceURI,"use");svg.setAttribute("class","ui-icon");svg.setAttribute("aria-hidden","true");use.setAttribute("href","#routilet-icon-copy");svg.append(use);const text=node("span","复制");b.append(svg,text);return b
  }
  function matches(e:Entry){return [...selectedTags].every(t=>e.tags?.includes(t))}
  function symbolNames(e:Entry){const names=e.variants?.flatMap(v=>v.symbols)??[];const common=e.signatures.map(s=>s.match(/([A-Za-z_]\w*)\s*\(/)?.[1]??s.replace(/^typedef.*?([A-Za-z_]\w*);$/,"$1"));return [...new Set([...names,...common])].join(" · ")}
@@ -71,7 +81,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
   detail.replaceChildren();const head=node("div","","manualHead");
   head.append(node("h2",e.title));detail.append(head);
   if(e.summary)detail.append(node("p",e.summary));
-  if(e.tags?.length){const row=node("div","","manual-tags manual-detail-tags");for(const t of e.tags)row.append(button(t,()=>{if(!selectedTags.has(t))toggleTag(t)}));detail.append(row)}
+  if(e.tags?.length){const row=node("div","","manual-tags manual-detail-tags");for(const t of e.tags){const b=button(t,()=>{if(!selectedTags.has(t))toggleTag(t)});b.className="ui-tag";row.append(b)};detail.append(row)}
   if(e.variants?.length){
    const variants=node("div","","manualVariants");
    for(const item of e.variants){const b=button(item.label,()=>show(id,item.key));b.setAttribute("aria-pressed",String(item.key===v?.key));variants.append(b)}
@@ -80,10 +90,8 @@ export function installManual(call:Call,canOpen:()=>boolean){
   const signatures=v?[...(e.commonSignatures??[]),...v.signatures]:e.signatures;
   const advanced=[...new Set([...(e.advancedSignatures??[]),...(v?.advancedSignatures??[])])];
   const visible=signatures.filter(s=>!advanced.includes(s));
-  function signatureList(items:string[]){
-   for(const signature of items){const wrap=node("div","","signature-row");const b=button("复制",()=>{b.disabled=true;void call("CopyManualSignature",id,currentKey,model!.fingerprint,signature).then(()=>{b.textContent="已复制";setTimeout(()=>{b.textContent="复制"},1200)}).catch(err=>setStatus(String(err))).finally(()=>{b.disabled=false})});b.setAttribute("aria-label","复制函数接口");wrap.append(codeBlock(signature),b);detail.append(wrap)}
-  }
-  if(visible.length){detail.append(node("h3","函数接口"));signatureList(visible)}
+  const fp=model.fingerprint,selectedKey=currentKey;
+  if(visible.length){for(let i=0;i<visible.length;i++){const signature=visible[i],row=node("div","","ui-code-head");row.append(node("h3",i===0?"函数接口":"接口 "+(i+1)),copyAction("复制函数接口",()=>call("CopyManualSignature",id,selectedKey,fp,signature)));detail.append(row,codeBlock(signature))}}
   if(e.parameters?.length){detail.append(node("h3","参数"));const table=node("table","","manual-params");for(const p of e.parameters){const tr=node("tr"),name=node("td");name.append(node("code",p.name));tr.append(name,node("td",p.description));table.append(tr)}detail.append(table)}
   if(e.returns){detail.append(node("h3","返回值"));prose(detail,e.returns)}
   if(e.requirements?.length){detail.append(node("h3","使用条件"));for(const s of e.requirements)prose(detail,s)}
@@ -92,10 +100,7 @@ export function installManual(call:Call,canOpen:()=>boolean){
   if(v?.note)prose(detail,v.note);if(e.complexity)detail.append(node("p","复杂度："+e.complexity,"muted"));
   const example=v?.example??e.example;
   if(example){
-   const row=node("div","","manualHead");row.append(node("h3","调用示例"));
-   const fp=model.fingerprint,selectedKey=currentKey;
-   const copy=button("复制示例",()=>{copy.disabled=true;void call("CopyManualExample",id,selectedKey,fp).then(()=>{copy.textContent="已复制";setTimeout(()=>{copy.textContent="复制示例"},1200)}).catch(err=>setStatus(String(err))).finally(()=>{copy.disabled=false})});
-   row.append(copy);detail.append(row,codeBlock(example))
+   const row=node("div","","ui-code-head");row.append(node("h3","调用示例"),copyAction("复制示例",()=>call("CopyManualExample",id,selectedKey,fp)));detail.append(row,codeBlock(example))
   }
   if(advanced.length){const more=document.createElement("details");more.append(node("summary","扩展接口 · 显式容量"),codeBlock(advanced.join("\n")));detail.append(more)}
   if(e.related?.length){detail.append(node("h3","相关操作"));const related=node("div","","manualVariants");for(const id of e.related){const target=entries.get(id);if(target)related.append(button(target.title,()=>{search.value="";selectedTags.clear();renderTags();renderList();show(id)}))}detail.append(related)}
@@ -130,11 +135,11 @@ export function installManual(call:Call,canOpen:()=>boolean){
   }catch(e){if(session===generation&&!dialog.hidden){model=undefined;entries.clear();clear();search.value="";version.textContent="";setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
  }
  el<HTMLButtonElement>("manualBtn").onclick=()=>void open();
- function close(){if(dialog.hidden)return;filter.open=false;if(model)saved.set(model.fingerprint,{id:current,key:currentKey,scroll:detail.scrollTop,navScroll:nav.scrollTop,query:search.value,tags:[...selectedTags]});generation++;queryEpoch++;dialog.hidden=true;el("workspace").hidden=false;el("workbenchSidebar").hidden=false;el("manualSidebar").hidden=true;el("manualBtn").setAttribute("aria-pressed","false");el("workbenchBtn").setAttribute("aria-pressed","true")}
+ function close(){if(dialog.hidden)return;if(!panel.hidden)popup.close(false);if(model)saved.set(model.fingerprint,{id:current,key:currentKey,scroll:detail.scrollTop,navScroll:nav.scrollTop,query:search.value,tags:[...selectedTags]});generation++;queryEpoch++;dialog.hidden=true;el("workspace").hidden=false;el("workbenchSidebar").hidden=false;el("manualSidebar").hidden=true;el("manualBtn").setAttribute("aria-pressed","false");el("workbenchBtn").setAttribute("aria-pressed","true")}
  el<HTMLButtonElement>("workbenchBtn").onclick=close;
  el<HTMLButtonElement>("manualNotes").onclick=notes;
  search.oninput=()=>void searchNow();
- search.onkeydown=e=>{if(e.key==="Escape"){e.preventDefault();if(filter.open)filter.open=false;else{search.value="";void searchNow()}return}const hits=Array.from(nav.querySelectorAll<HTMLButtonElement>("[data-entry]"));if(!hits.length)return;if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();keyboardIndex=Math.max(0,Math.min(hits.length-1,keyboardIndex+(e.key==="ArrowDown"?1:-1)));hits.forEach((b,i)=>b.classList.toggle("keyboard-hit",i===keyboardIndex));hits[keyboardIndex].scrollIntoView({block:"nearest"})}if(e.key==="Enter"){e.preventDefault();hits[Math.max(0,keyboardIndex)]?.click()}};
+ search.onkeydown=e=>{if(e.key==="Escape"){e.preventDefault();if(!panel.hidden)popup.close(true);else{search.value="";void searchNow()}return}const hits=Array.from(nav.querySelectorAll<HTMLButtonElement>("[data-entry]"));if(!hits.length)return;if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();keyboardIndex=Math.max(0,Math.min(hits.length-1,keyboardIndex+(e.key==="ArrowDown"?1:-1)));hits.forEach((b,i)=>b.classList.toggle("keyboard-hit",i===keyboardIndex));hits[keyboardIndex].scrollIntoView({block:"nearest"})}if(e.key==="Enter"){e.preventDefault();hits[Math.max(0,keyboardIndex)]?.click()}};
  document.addEventListener("keydown",e=>{if(!dialog.hidden&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){e.preventDefault();search.focus();search.select()}});
  
  return {open,close,isOpen:()=>!dialog.hidden}

@@ -1,8 +1,8 @@
 import {copyFile,mkdir,cp,readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 const manifest=JSON.parse(await readFile('ui/manifest.json','utf8'));
-for(const [name,hash] of Object.entries(manifest.files)){if(createHash('sha256').update(await readFile('ui/'+name)).digest('hex')!==hash)throw Error('UI snapshot mismatch: '+name)}
-if(manifest.algorithm!=='sha256'||manifest.version!=='0.2.0')throw Error('Unsupported UI snapshot');
+for(const [name,hash] of Object.entries(manifest.files)){if(createHash('sha1').update('blob '+(await readFile('ui/'+name)).length+'\0').update(await readFile('ui/'+name)).digest('hex')!==hash)throw Error('UI snapshot mismatch: '+name)}
+if(manifest.algorithm!=='git-blob-sha1'||manifest.version!=='0.3.0')throw Error('Unsupported UI snapshot');
 await mkdir('dist',{recursive:true});
 await copyFile('style.css','dist/style.css');
 await cp('ui','dist/ui',{recursive:true});

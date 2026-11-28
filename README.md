@@ -6,11 +6,11 @@ Routilet 的文件优先 C/C++ 编程辅助工具。普通源文件和文件夹�
 
 ## 正式版
 
-首个正式发行版本 0.1.0，面向 Windows 11 x64 和 Apple Silicon macOS 12+（系统 WebView）。通过 Routilet 0.1.8 或兼容新版的正式通道安装 `@routilet/companion`；在线功能另行安装并启用 `@routilet/accoding-adapter` 0.1.0。Exam Kit 由 Routilet 独立安装、更新，Companion 在创建、导入、阅读手册或显式切换资源时按需获取已启用资源；已有工作区快照不自动改写。未安装时仍可使用普通文件的本地功能。Observer 独立可选。没有 Adapter 或网络仍可使用本地功能，首次进入 OJ 工作台时可恢复已保存登录，不自动下载。在线提交必须明确确认，结果不确定时不要直接重发。
+正式发行版本 0.2.0，面向 Windows 11 x64 和 Apple Silicon macOS 12+（系统 WebView）。通过 Routilet 0.2.0 或兼容新版的正式通道安装 `@routilet/companion`；在线功能另行安装并启用 `@routilet/accoding-adapter` 0.1.1。Exam Kit 由 Routilet 独立安装、更新，Companion 在创建、导入、阅读手册或显式切换资源时按需获取已启用资源；已有工作区快照不自动改写。新版 Exam Kit 0.7.0 使用扁平标签手册，历史资源仍可读；在函数手册中按名称或中文用途搜索、多选标签筛选，复制接口和调用示例。未安装时仍可使用普通文件的本地功能。Observer 独立可选。没有 Adapter 或网络仍可使用本地功能，首次进入 OJ 工作台时可恢复已保存登录，不自动下载。在线提交必须明确确认，结果不确定时不要直接重发。
 
 已完成 beta 阶段的日常使用反馈与界面评审；正式包仍须通过自动化发行门禁。自动测试不执行真实 OJ 提交，系统 WebView 与平台变化仍可能影响体验。不迁移旧课程数据，不更改旧 npm 包。请遵守课程考试规定；运行可信源码，本地运行不是沙箱。
 
-- [发行与集成](docs/distribution.md) · [0.1.0 发行说明](docs/release-0.1.0.md) · [产品原则](docs/product.md)
+- [发行与集成](docs/distribution.md) · [历史 0.1.0 发行说明](docs/release-0.1.0.md) · [产品原则](docs/product.md)
 - [正式 Adapter 接入](docs/managed-adapter.md) · [设计与路线图](docs/companion-next-roadmap.md)
 - [存储设计](docs/companion-next-storage.md) · [核心接口](docs/companion-next-api.md)
 - [迁移来源与验收](docs/migration.md) · [开发与测试](docs/development.md)

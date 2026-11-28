@@ -200,7 +200,7 @@ test('manual preserves version-scoped reading state and copies a signature',asyn
  await p.locator('#manualNav [data-entry]').click();
  assert.equal(await p.locator('#manualDetail h2').textContent(),'读取数字');
  assert.ok(await p.locator('#manualDetail .syntax-keyword').count()>0);
- await p.getByRole('button',{name:'复制函数接口'}).click();
+ assert.equal(await p.locator('#manualDetail .ui-code-head .ui-copy').count(),2);await p.getByRole('button',{name:'复制函数接口'}).click();
  await p.waitForFunction(()=>fixture.calls.some(c=>c[0]==='CopyManualSignature'));
  assert.deepEqual(await p.evaluate(()=>fixture.calls.find(c=>c[0]==='CopyManualSignature')),['CopyManualSignature','read_number','','fixture-v1','int read_int(void);']);
  const side=await p.locator('.sidebar').boundingBox();assert.equal(await p.locator('#shell').isVisible(),true);assert.equal(await p.locator('#workspace').isVisible(),false);assert.equal(await p.locator('#manualSidebar').isVisible(),true);assert.equal(await p.locator('#workbenchSidebar').isVisible(),false);await p.locator('#workbenchBtn').click();assert.equal(await p.locator('#workspace').isVisible(),true);assert.equal(await p.locator('#manualSidebar').isVisible(),false);assert.deepEqual(await p.locator('.sidebar').boundingBox(),side);await p.locator('#manualBtn').click();
@@ -334,7 +334,7 @@ test('language selection is only shown when matching is ambiguous, and failed se
  await p.evaluate(()=>{fixture.ojAvailable=true;fixture.ojBinding={title:'测试题',label:'A',target:{kind:'problemset'}};fixture.ojLanguages=['GNU C99','C11'];fixture.failSend=true});
  await p.locator('#settings').click();await p.waitForFunction(()=>document.querySelector('#adapterConfigStatus').textContent==='可用');await p.locator('#closeConfig').click();await p.locator('#ojMode').click();await p.locator('#ojSubmitBtn').click();await p.locator('#ojSubmitConfirm').waitFor();
  assert.equal(await p.locator('#ojSubmitConfirm').isEnabled(),false);assert.equal(await p.locator('#ojLanguageChoice').isVisible(),true);
- await p.locator('#ojSubmitLanguage').selectOption('GNU C99');await p.locator('#ojSubmitConfirm').click();await p.locator('#ojSubmitReconcile').waitFor();assert.equal(await p.locator('#ojSubmitConfirm').isVisible(),false);
+ const lang=p.locator('[data-select-for="ojSubmitLanguage"]');await lang.click();await p.getByRole('option',{name:'GNU C99',exact:true}).click();assert.equal(await p.locator('#ojSubmitLanguage').inputValue(),'GNU C99');await p.locator('#ojSubmitConfirm').click();await p.locator('#ojSubmitReconcile').waitFor();assert.equal(await p.locator('#ojSubmitConfirm').isVisible(),false);
  await p.locator('#ojSubmitReconcile').click();await p.waitForFunction(()=>document.querySelector('#ojSubmitNotice').textContent.includes('请勿重复提交'));
  assert.equal(await p.evaluate(()=>fixture.calls.filter(c=>c[0]==='OJSendSubmission').length),1)
 });
@@ -384,4 +384,4 @@ test('sidebar occupies full content height and page controls stay in right pane'
  await p.locator('#workbenchBtn').click();assert.equal(await p.locator('.workspace-picker').isVisible(),true);
 });
 
-test('manual uses a flat list and tag filter with no category navigation',async t=>{const p=await setup(t);await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);assert.equal(await p.locator('#manualNav details').count(),0);await p.locator('#manualFilter summary').click();await p.locator('#manualTags button').first().click();assert.equal(await p.locator('#manualSelectedTags button').count(),1);await p.locator('#manualSelectedTags button').first().click();assert.equal(await p.locator('#manualSelectedTags button').count(),0);});
+test('manual uses a flat list and tag filter with no category navigation',async t=>{const p=await setup(t);await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);assert.equal(await p.locator('#manualNav details').count(),0);const before=await p.locator('#manualNav').boundingBox();await p.locator('#manualFilter').click();await p.locator('#manualTags button').first().click();assert.equal(await p.locator('#manualTags button[aria-pressed=true]').count(),1);assert.deepEqual(await p.locator('#manualNav').boundingBox(),before);await p.locator('#manualClearTags').click();assert.equal(await p.locator('#manualTags button[aria-pressed=true]').count(),0);await p.locator('#manualDoneTags').click();assert.equal(await p.locator('#manualTagPopup').isVisible(),false);});
