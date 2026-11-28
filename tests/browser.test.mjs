@@ -375,3 +375,11 @@ test('shared design snapshot renders unique inline icons and stable shell',async
  const menu=await p.locator('#openMenu .menuitems').boundingBox();
  assert.ok(menu.x>=0&&menu.x+menu.width<=680&&menu.y>=0&&menu.y+menu.height<=600);
 });
+
+test('sidebar occupies full content height and page controls stay in right pane',async t=>{
+ const p=await setup(t);const sidebar=await p.locator('.sidebar').boundingBox(),bar=await p.locator('.appbar').boundingBox(),pane=await p.locator('.main-pane').boundingBox();
+ assert.equal(sidebar.y,bar.y);assert.ok(bar.x>=sidebar.x+sidebar.width);assert.equal(bar.x,pane.x);
+ await p.locator('#manualBtn').click();await p.waitForFunction(()=>!document.querySelector('#manualSearch').disabled);
+ assert.equal(await p.locator('.workspace-picker').isVisible(),false);assert.deepEqual(await p.locator('.sidebar').boundingBox(),sidebar);
+ await p.locator('#workbenchBtn').click();assert.equal(await p.locator('.workspace-picker').isVisible(),true);
+});
