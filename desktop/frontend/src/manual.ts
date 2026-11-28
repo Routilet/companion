@@ -41,7 +41,7 @@ function prose(parent:HTMLElement,text:string){
  if(code.length)parent.append(codeBlock(code.join("\n")));
 }
 export function installManual(call:Call,canOpen:()=>boolean){
- const dialog=el<HTMLDialogElement>("manualDialog"),search=el<HTMLInputElement>("manualSearch"),nav=el("manualNav"),detail=el("manualDetail"),status=el("manualStatus"),version=el("manualVersion");
+ const dialog=el("manualDialog"),search=el<HTMLInputElement>("manualSearch"),nav=el("manualNav"),detail=el("manualDetail"),status=el("manualStatus"),version=el("manualVersion");
  let model:Manual|undefined,entries=new Map<string,Entry>(),generation=0,queryEpoch=0,current="",currentKey="",trail:{id:string;key:string}[]=[];
  const saved=new Map<string,{id:string;key:string;scroll:number;navScroll:number;expanded:string[]}>();let openSections=new Set<string>();let keyboardIndex=-1;
  function setStatus(s:string){status.textContent=s}
@@ -103,22 +103,23 @@ export function installManual(call:Call,canOpen:()=>boolean){
   const epoch=++queryEpoch,session=generation,q=search.value.trim();
   if(!model)return;
   keyboardIndex=-1;if(!q){tree();return}
-  try{const hits=await call<Hit[]>("SearchManual",q);if(epoch!==queryEpoch||session!==generation||!dialog.open)return;
+  try{const hits=await call<Hit[]>("SearchManual",q);if(epoch!==queryEpoch||session!==generation||dialog.hidden)return;
    nav.replaceChildren(node("p",hits.length+" 项结果","muted"));
    keyboardIndex=-1;for(const h of hits)nav.append(entryButton(h.id,h.variant,h.category));highlight();
   }catch(e){if(epoch===queryEpoch&&session===generation)setStatus(String(e))}
  }
  async function open(){
-  if(dialog.open||!canOpen())return;
-  const session=++generation;queryEpoch++;model=undefined;entries.clear();clear();search.value="";search.disabled=true;version.textContent="";setStatus("正在读取本地资源…");dialog.showModal();
-  try{const m=await call<Manual>("OpenManual");if(session!==generation||!dialog.open)return;
-   model=m;entries=new Map(m.reference.categories.flatMap(c=>c.entries.map(e=>[e.id,e] as const)));
+  if(!dialog.hidden||!canOpen())return;
+  const session=++generation;queryEpoch++;search.disabled=true;setStatus("正在读取本地资源…");dialog.hidden=false;el("shell").hidden=true;el("manualBtn").setAttribute("aria-pressed","true");el("workbenchBtn").setAttribute("aria-pressed","false");
+  try{const m=await call<Manual>("OpenManual");if(session!==generation||dialog.hidden)return;
+   if(model?.fingerprint===m.fingerprint){search.disabled=false;setStatus("");const previous=saved.get(m.fingerprint);if(search.value.trim())await searchNow();if(session===generation&&!dialog.hidden&&previous){detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}return}model=m;clear();search.value="";entries=new Map(m.reference.categories.flatMap(c=>c.entries.map(e=>[e.id,e] as const)));
    version.textContent="Exam Kit "+m.reference.version+(m.origin==="snapshot"?" · 当前文件资源快照":" · 已安装资源")+" · "+entries.size+" 项";
    const previous=saved.get(m.fingerprint);openSections=new Set(previous?.expanded??[]);tree();if(previous?.id&&entries.has(previous.id)){show(previous.id,previous.key);detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}else notes();search.disabled=false;setStatus("");search.focus()
-  }catch(e){if(session===generation&&dialog.open){setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
+  }catch(e){if(session===generation&&!dialog.hidden){model=undefined;entries.clear();clear();search.value="";version.textContent="";setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
  }
  el<HTMLButtonElement>("manualBtn").onclick=()=>void open();
- el<HTMLButtonElement>("manualClose").onclick=()=>dialog.close();
+ function close(){if(dialog.hidden)return;if(model)saved.set(model.fingerprint,{id:current,key:currentKey,scroll:detail.scrollTop,navScroll:nav.scrollTop,expanded:[...openSections]});generation++;queryEpoch++;dialog.hidden=true;el("shell").hidden=false;el("manualBtn").setAttribute("aria-pressed","false");el("workbenchBtn").setAttribute("aria-pressed","true")}
+ el<HTMLButtonElement>("workbenchBtn").onclick=close;
  search.oninput=()=>void searchNow();
  search.onkeydown=e=>{if(!search.value.trim())return;const hits=Array.from(nav.querySelectorAll<HTMLButtonElement>("[data-entry]"));if(!hits.length)return;if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();keyboardIndex=Math.max(0,Math.min(hits.length-1,keyboardIndex+(e.key==="ArrowDown"?1:-1)));hits.forEach((b,i)=>b.classList.toggle("keyboard-hit",i===keyboardIndex));hits[keyboardIndex].scrollIntoView({block:"nearest"})}if(e.key==="Enter"){e.preventDefault();hits[Math.max(0,keyboardIndex)]?.click()}};
  const grip=el("manualGrip"),layout=grip.parentElement!;let width=240;
@@ -126,6 +127,6 @@ export function installManual(call:Call,canOpen:()=>boolean){
  grip.onkeydown=e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();resize(width+(e.key==="ArrowRight"?12:-12))}};
  grip.onpointerdown=e=>{grip.setPointerCapture(e.pointerId);const x=e.clientX,start=width;grip.onpointermove=ev=>resize(start+ev.clientX-x);grip.onlostpointercapture=()=>{grip.onpointermove=null}};
  dialog.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){e.preventDefault();search.focus();search.select()}});
- dialog.onclose=()=>{if(model)saved.set(model.fingerprint,{id:current,key:currentKey,scroll:detail.scrollTop,navScroll:nav.scrollTop,expanded:[...openSections]});generation++;queryEpoch++;model=undefined;entries.clear()};
- return {open,isOpen:()=>dialog.open}
+ 
+ return {open,close,isOpen:()=>!dialog.hidden}
 }
