@@ -326,6 +326,17 @@ let lastAccountKey="";async function syncOJVisibility(){try{const a=await call<P
 config.addEventListener("close",()=>{void syncOJVisibility()});
 async function refreshOJ(paths:string[]){if(busy||!paths.length)return;busy=true;updateControls();try{if(await ojAccount.requireLogin())await ojStatus.refresh(paths)}finally{busy=false;updateControls()}}
 btn("ojRefreshTree").onclick=()=>{void refreshOJ(workbench.groupPaths())};
+btn("ojRefreshMaterials").onclick=()=>{
+ const paths=workbench.materialPaths();if(!paths.length||busy)return;
+ void navigate(async()=>{
+  if(!await dialogs.confirm("从 Accoding 重新获取当前比赛已导入的题面和样例。变化的资料将先备份，再以在线版本替换；源码不变。","更新"))return;
+  if(!await ojAccount.requireLogin())return;
+  status.textContent="正在更新比赛题面与样例…";
+  const r=await call<{updated:string[];unchanged:string[];skipped:string[];failed:string[];backups:string[];missing:number}>("OJRefreshMaterials",paths);
+  if(source&&paths.includes(source.path)){last=undefined;prepared=undefined;await reload();await documentReader.refresh(source.path)}
+  status.textContent="更新 "+r.updated.length+" 题，未变化 "+r.unchanged.length+" 题"+(r.missing?"；另有 "+r.missing+" 道在线题目尚未导入":"")+(r.skipped.length?"；保留 "+r.skipped.length+" 项："+r.skipped.join("；"):"")+(r.failed.length?"；失败 "+r.failed.length+" 项："+r.failed.join("；"):"")+(r.backups.length?"；原资料已备份至各题 .companion/refresh-backups":"")+"。";
+ });
+};
 btn("ojRefreshCurrent").onclick=()=>{if(source)void refreshOJ([source.path])};
 
 let preferenceFlight:Promise<void>=Promise.resolve();function savePreferences(){const c=el<HTMLInputElement>("cc").value.trim(),cpp=el<HTMLInputElement>("cxx").value.trim();preferenceFlight=preferenceFlight.then(async()=>{if(c===compilerByLanguage.c&&cpp===compilerByLanguage.cpp)return;try{await call("StoreConfig",c,cpp,editorPath.trim());compilerByLanguage.c=c;compilerByLanguage.cpp=cpp;if(source)compiler.value=compilerByLanguage[language(source)];markStale();el("configNotice").hidden=true}catch(e){el("configNotice").textContent="保存失败："+String(e);el("configNotice").hidden=false}});return preferenceFlight}el<HTMLInputElement>("cc").onchange=()=>void savePreferences();el<HTMLInputElement>("cxx").onchange=()=>void savePreferences();
