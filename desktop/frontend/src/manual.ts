@@ -1,7 +1,6 @@
 type Variant={key:string;label:string;symbols:string[];signatures:string[];advancedSignatures?:string[];note:string;example:string};
 type Entry={tags?:string[];keywords?:string[];summary?:string;parameters?:{name:string;description:string}[];returns?:string;requirements?:string[];errors?:string[];complexity?:string;id:string;title:string;description:string;example:string;signatures:string[];commonSignatures?:string[];advancedSignatures?:string[];related?:string[];variants?:Variant[]};
-type Section={title:string;children?:Section[];entries?:string[]};
-type Reference={entries?:Entry[];tags?:string[];version:string;notes:string;categories:{title:string;entries:Entry[]}[];sections:Section[]};
+type Reference={entries?:Entry[];tags?:string[];version:string;notes:string;categories?:{title:string;entries:Entry[]}[];sections?:unknown[]};
 type Manual={reference:Reference;origin:string;sourcePath?:string;fingerprint:string};
 type Hit={id:string;variant?:string;category:string};
 type Call=<T>(method:string,...args:unknown[])=>Promise<T>;
@@ -42,7 +41,7 @@ function prose(parent:HTMLElement,text:string){
 }
 export function installManual(call:Call,canOpen:()=>boolean){
  const dialog=el("manualDialog"),search=el<HTMLInputElement>("manualSearch"),nav=el("manualNav"),detail=el("manualDetail"),status=el("manualStatus"),version=el("manualVersion");
- let model:Manual|undefined,entries=new Map<string,Entry>(),generation=0,queryEpoch=0,current="",currentKey="",trail:{id:string;key:string}[]=[];
+ let model:Manual|undefined,entries=new Map<string,Entry>(),generation=0,queryEpoch=0,current="",currentKey="";
  const saved=new Map<string,{id:string;key:string;scroll:number;navScroll:number;query:string;tags:string[]}>();let selectedTags=new Set<string>();let keyboardIndex=-1;
  const filter=el<HTMLDetailsElement>("manualFilter"),tagPanel=el("manualTags"),chosen=el("manualSelectedTags"),count=el("manualCount");
  function toggleTag(t:string){if(selectedTags.has(t))selectedTags.delete(t);else selectedTags.add(t);renderTags();void searchNow()}
@@ -55,19 +54,18 @@ export function installManual(call:Call,canOpen:()=>boolean){
   chosen.hidden=!selectedTags.size;
  }
  function matches(e:Entry){return [...selectedTags].every(t=>e.tags?.includes(t))}
- function symbolNames(e:Entry){const names=e.variants?.flatMap(v=>v.symbols)??[];const common=e.signatures.map(s=>s.match(/([A-Za-z_]\\w*)\\s*\\(/)?.[1]??s.replace(/^typedef.*?([A-Za-z_]\\w*);$/,"$1"));return [...new Set([...names,...common])].join(" · ")}
+ function symbolNames(e:Entry){const names=e.variants?.flatMap(v=>v.symbols)??[];const common=e.signatures.map(s=>s.match(/([A-Za-z_]\w*)\s*\(/)?.[1]??s.replace(/^typedef.*?([A-Za-z_]\w*);$/,"$1"));return [...new Set([...names,...common])].join(" · ")}
 
  function setStatus(s:string){status.textContent=s}
- function clear(){nav.replaceChildren();detail.replaceChildren();current="";currentKey="";trail=[]}
+ function clear(){nav.replaceChildren();detail.replaceChildren();current="";currentKey=""}
  function highlight(){for(const b of Array.from(nav.querySelectorAll<HTMLButtonElement>("[data-entry]")))b.setAttribute("aria-current",String(b.dataset.entry===current))}
  function locate(){const b=Array.from(nav.querySelectorAll<HTMLButtonElement>("[data-entry]")).find(b=>b.dataset.entry===current);b?.scrollIntoView({block:"nearest"})}
  function notes(){
   current="";currentKey="";highlight();detail.replaceChildren(node("h2","使用约定"));
   if(model)prose(detail,model.reference.notes||"此版本没有独立使用约定。");detail.scrollTop=0
  }
- function show(id:string,key="",remember=false){
+ function show(id:string,key=""){
   const e=entries.get(id);if(!e||!model)return;
-  if(remember&&current)trail.push({id:current,key:currentKey});
   const v=e.variants?.find(v=>v.key===key)??e.variants?.[0];
   current=id;currentKey=v?.key??"";highlight();locate();
   detail.replaceChildren();const head=node("div","","manualHead");
@@ -100,18 +98,18 @@ export function installManual(call:Call,canOpen:()=>boolean){
    row.append(copy);detail.append(row,codeBlock(example))
   }
   if(advanced.length){const more=document.createElement("details");more.append(node("summary","扩展接口 · 显式容量"),codeBlock(advanced.join("\n")));detail.append(more)}
-  if(e.related?.length){detail.append(node("h3","相关操作"));const related=node("div","","manualVariants");for(const id of e.related){const target=entries.get(id);if(target)related.append(button(target.title,()=>show(id,"",true)))}detail.append(related)}
+  if(e.related?.length){detail.append(node("h3","相关操作"));const related=node("div","","manualVariants");for(const id of e.related){const target=entries.get(id);if(target)related.append(button(target.title,()=>{search.value="";selectedTags.clear();renderTags();renderList();show(id)}))}detail.append(related)}
   detail.scrollTop=0
  }
- function entryButton(id:string,key="",category=""){
+ function entryButton(id:string,key=""){
   const e=entries.get(id);if(!e)return node("span",id);
-  const b=button(e.title,()=>{trail=[];show(id,key)});b.dataset.entry=id;b.classList.add("ui-list-item");b.title=symbolNames(e);
+  const b=button(e.title,()=>show(id,key));b.dataset.entry=id;b.classList.add("ui-list-item");b.title=symbolNames(e);
   const v=e.variants?.find(v=>v.key===key);b.append(node("small",v?.symbols.join(" · ")??symbolNames(e)));return b
  }
  function renderList(hits?:Hit[]){
   const list=hits?hits.filter(h=>{const e=entries.get(h.id);return !!e&&matches(e)}):[...entries.values()].filter(matches).map(e=>({id:e.id,variant:"",category:""}));
   nav.replaceChildren();keyboardIndex=-1;count.textContent=list.length+" 项";
-  for(const h of list)nav.append(entryButton(h.id,h.variant,h.category));highlight();
+  for(const h of list)nav.append(entryButton(h.id,h.variant));highlight();
   if(!list.length)nav.append(node("p","没有匹配的函数","muted"));
  }
  async function searchNow(){
@@ -125,10 +123,10 @@ export function installManual(call:Call,canOpen:()=>boolean){
   if(!dialog.hidden||!canOpen())return;
   const session=++generation;queryEpoch++;search.disabled=true;setStatus("正在读取本地资源…");dialog.hidden=false;el("workspace").hidden=true;el("workbenchSidebar").hidden=true;el("manualSidebar").hidden=false;el("manualBtn").setAttribute("aria-pressed","true");el("workbenchBtn").setAttribute("aria-pressed","false");
   try{const m=await call<Manual>("OpenManual");if(session!==generation||dialog.hidden)return;
-   if(model?.fingerprint===m.fingerprint){search.disabled=false;setStatus("");const previous=saved.get(m.fingerprint);if(search.value.trim())await searchNow();if(session===generation&&!dialog.hidden&&previous){detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}return}model=m;clear();search.value="";const source=m.reference.entries??m.reference.categories.flatMap(c=>c.entries.map(e=>({...e,tags:e.tags??[c.title]})));
+   if(model?.fingerprint===m.fingerprint){search.disabled=false;setStatus("");const previous=saved.get(m.fingerprint);if(search.value.trim())await searchNow();if(session===generation&&!dialog.hidden&&previous){detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}return}model=m;clear();search.value="";const source=m.reference.entries??(m.reference.categories??[]).flatMap(c=>c.entries.map(e=>({...e,tags:e.tags??[c.title]})));
    entries=new Map(source.map(e=>[e.id,e] as const));
    version.textContent="Exam Kit "+m.reference.version+(m.origin==="snapshot"?" · 当前文件资源快照":" · 已安装资源")+" · "+entries.size+" 项";
-   const previous=saved.get(m.fingerprint);selectedTags=new Set(previous?.tags??[]);search.value=previous?.query??"";renderTags();renderList();if(search.value.trim())void searchNow();if(previous?.id&&entries.has(previous.id)){show(previous.id,previous.key);detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}else notes();search.disabled=false;setStatus("");search.focus()
+   const previous=saved.get(m.fingerprint);selectedTags=new Set(previous?.tags??[]);search.value=previous?.query??"";renderTags();renderList();if(search.value.trim())await searchNow();if(session!==generation||dialog.hidden)return;if(previous?.id&&entries.has(previous.id)){show(previous.id,previous.key);detail.scrollTop=previous.scroll;nav.scrollTop=previous.navScroll}else notes();search.disabled=false;setStatus("");search.focus()
   }catch(e){if(session===generation&&!dialog.hidden){model=undefined;entries.clear();clear();search.value="";version.textContent="";setStatus(String(e));detail.append(node("p","无法读取匹配的手册。请检查当前文件的资源快照，或在 Routilet 中检查 Exam Kit 安装状态。"))}}
  }
  el<HTMLButtonElement>("manualBtn").onclick=()=>void open();
