@@ -48,13 +48,7 @@ type ReferenceSection struct {
  Children []ReferenceSection `json:"children,omitempty"`
  Entries []string `json:"entries,omitempty"`
 }
-type FlatReference struct {
- SchemaVersion int `json:"schemaVersion"`
- Tags []string `json:"tags"`
- Entries []ReferenceEntry `json:"entries"`
-}
 type Reference struct {
- Flat *FlatReference `json:"flat,omitempty"`
  Tags []string `json:"tags,omitempty"`
  Entries []ReferenceEntry `json:"entries,omitempty"`
  SchemaVersion int `json:"schemaVersion"`
@@ -73,7 +67,7 @@ func ParseReference(raw []byte,version string)(Reference,error){
  var r Reference
  if e:=json.Unmarshal(raw,&r);e!=nil{return r,e}
  if r.Version!=version{return r,errors.New("函数手册版本无效")}
- if r.SchemaVersion==2{return normalizeFlat(r,FlatReference{2,r.Tags,r.Entries})}
+ if r.SchemaVersion==2{return validateFlat(r)}
  if r.SchemaVersion!=1||len(r.Categories)==0{return r,errors.New("函数手册格式或版本无效")}
  ids:=map[string]ReferenceEntry{}
  for _,c:=range r.Categories{
@@ -101,7 +95,6 @@ func ParseReference(raw []byte,version string)(Reference,error){
  }
  if e:=visit(r.Sections,0);e!=nil{return r,e}
  if len(seen)!=len(ids){return r,errors.New("函数手册目录缺少条目")}
- if r.Flat!=nil{return normalizeFlat(r,*r.Flat)}
  r.Entries=nil;r.Tags=nil
  paths:=map[string][]string{}
  var collect func([]ReferenceSection,[]string)
@@ -111,21 +104,19 @@ func ParseReference(raw []byte,version string)(Reference,error){
  return r,nil
 }
 
-// The transitional v1 envelope embeds an independent v2 model. Keep the
-// resource bytes unchanged for old snapshot fingerprints and older readers.
-func normalizeFlat(r Reference,f FlatReference)(Reference,error){
- if f.SchemaVersion!=2||len(f.Entries)==0||len(f.Entries)>4096||len(f.Tags)==0||len(f.Tags)>128{return r,errors.New("函数手册 v2 格式无效")}
- tags:=map[string]bool{};for _,tag:=range f.Tags{if strings.TrimSpace(tag)==""||tags[tag]{return r,errors.New("重复或空手册标签")};tags[tag]=true}
+// Read native flat schema v2; historical v1 resources remain readable.
+func validateFlat(r Reference)(Reference,error){
+ if r.SchemaVersion!=2||len(r.Entries)==0||len(r.Entries)>4096||len(r.Tags)==0||len(r.Tags)>128{return r,errors.New("函数手册 v2 格式无效")}
+ tags:=map[string]bool{};for _,tag:=range r.Tags{if strings.TrimSpace(tag)==""||tags[tag]{return r,errors.New("重复或空手册标签")};tags[tag]=true}
  ids:=map[string]bool{}
- for _,e:=range f.Entries{
+ for _,e:=range r.Entries{
   if !kitID.MatchString(e.ID)||ids[e.ID]||strings.TrimSpace(e.Title)==""||strings.TrimSpace(e.Summary)==""||len(e.Signatures)==0||len(e.Tags)==0{return r,fmt.Errorf("函数手册 v2 条目无效: %s",e.ID)}
   ids[e.ID]=true;used:=map[string]bool{}
   for _,tag:=range e.Tags{if !tags[tag]||used[tag]{return r,fmt.Errorf("无效手册标签: %s",tag)};used[tag]=true}
   keys:=map[string]bool{};for _,v:=range e.Variants{if v.Key==""||v.Label==""||keys[v.Key]||len(v.Symbols)==0||len(v.Signatures)==0{return r,errors.New("无效函数变体")};keys[v.Key]=true}
   params:=map[string]bool{};for _,p:=range e.Parameters{if !kitID.MatchString(p.Name)||strings.TrimSpace(p.Description)==""||params[p.Name]{return r,errors.New("无效参数说明")};params[p.Name]=true}
  }
- for _,e:=range f.Entries{for _,id:=range e.Related{if id==e.ID||!ids[id]{return r,fmt.Errorf("无效相关条目: %s",id)}}}
- r.Entries=f.Entries;r.Tags=f.Tags;r.Flat=nil
+ for _,e:=range r.Entries{for _,id:=range e.Related{if id==e.ID||!ids[id]{return r,fmt.Errorf("无效相关条目: %s",id)}}}
  return r,nil
 }
 func(r Reference) AllEntries()[]ReferenceEntry{
