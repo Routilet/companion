@@ -7,8 +7,8 @@ body{height:100vh;display:flex;flex-direction:column;overflow:hidden}
 .appbar>.spacer:last-of-type{min-width:30px}.page-switch{flex:none}
 .shell{--sidebar-width:220px;flex:1;min-height:0;min-width:0;display:grid;grid-template-columns:min(var(--sidebar-width),42%) 5px minmax(0,1fr);grid-template-rows:minmax(0,1fr);overflow:hidden}
 .sidebar{padding:12px 9px;gap:10px;border:0;overflow:hidden}.app-brand{display:flex;align-items:center;gap:9px;padding:0 3px 3px;font-size:var(--ui-heading);font-weight:650}
-.workspace-picker{min-width:0}.workspace-picker .menu{width:100%}.workspace-picker summary{display:block;background:var(--ui-hover);padding:7px 10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.workspace-picker .menuitems{left:0;right:auto}.context-sidebar,.sidebar-body{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden;gap:8px}
+.workspace-picker{min-width:0}.workspace-picker .menu{width:100%}.workspace-picker summary{display:flex;justify-content:flex-start;gap:7px;background:var(--ui-hover);padding:7px 10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workspace-picker .workspace-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.workspace-picker .menuitems{left:0;right:auto}.context-sidebar,.sidebar-body{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden;gap:8px}
 .workbench-switch{display:flex;flex:none;width:100%}.workbench-switch button{flex:1}
 .sidehead,.contest-picker{display:flex;align-items:center;gap:4px;min-width:0;flex:none}.sidehead strong{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .contest-picker select{flex:1;width:0;min-width:0;text-overflow:ellipsis;background:transparent;border-color:transparent;padding:4px}
