@@ -113,11 +113,10 @@ func validateReference(raw []byte,version string)error{
   Version string
   Categories []json.RawMessage
   Sections []json.RawMessage
-  Flat *json.RawMessage
  }
  if e:=json.Unmarshal(raw,&ref);e!=nil{return e}
  if ref.Version!=version{return errors.New("Exam Kit reference.json 版本不匹配")}
- if ref.SchemaVersion==2||ref.Flat!=nil{_,e:=ParseReference(raw,version);return e}
+ if ref.SchemaVersion==2{_,e:=ParseReference(raw,version);return e}
  if ref.SchemaVersion!=1||len(ref.Categories)==0||len(ref.Sections)==0{return errors.New("Exam Kit reference.json 格式不匹配")}
  return nil
 }
