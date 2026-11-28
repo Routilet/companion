@@ -47,19 +47,19 @@ func hasV1(list []int)bool{for _,v:=range list{if v==1{return true}};return fals
 func observerPlatform()(string,string,error){
  if runtime.GOOS=="windows"&&runtime.GOARCH=="amd64"{return "win32-x64","gdb",nil}
  if runtime.GOOS=="darwin"&&runtime.GOARCH=="arm64"{return "darwin-arm64","lldb",nil}
- return "","",errors.New("Observer 0.2 GUI 仅支持 Windows x64 和 Apple Silicon macOS")
+ return "","",errors.New("Observer GUI 仅支持 Windows x64 和 Apple Silicon macOS")
 }
 // Resolve the official package's manifest, never a guessed bin path.
 // A checksum verifies package integrity, not publisher authenticity.
 func resolveObserver(root,platform string)(observerManifest,string,error){
  var m observerManifest
- if root==""||!filepath.IsAbs(root){return m,"",errors.New("请先在设置中选择已安装的 Observer 0.2.0 资源包")}
+ if root==""||!filepath.IsAbs(root){return m,"",errors.New("请先选择已安装的兼容 Observer 资源包")}
  root,e:=filepath.EvalSymlinks(root);if e!=nil{return m,"",e}
  b,e:=readKitFile(root,"manifest.json");if e!=nil{return m,"",e}
  if e=json.Unmarshal(b,&m);e!=nil{return m,"",e}
- if m.SchemaVersion!=1||m.Version!="0.2.0"||!hasV1(m.SessionSchemaVersions){return m,"",errors.New("当前仅验证 Observer 正式版 0.2.0 / session v1")}
+ if m.SchemaVersion!=1||!validObserverVersion(m.Version)||!hasV1(m.SessionSchemaVersions){return m,"",errors.New("Observer 清单版本或 session v1 不兼容")}
  target,ok:=m.Platforms[platform]
- if !ok||target.Status!="stable"||target.Executable==""||len(target.SHA256)!=64{return m,"",errors.New("Observer 不包含当前平台的正式二进制")}
+ if !ok||(target.Status!="stable"&&target.Status!="preview"&&target.Status!="beta")||target.Executable==""||len(target.SHA256)!=64{return m,"",errors.New("Observer 不包含当前平台的可用二进制")}
  rel:=filepath.FromSlash(target.Executable)
  if filepath.IsAbs(rel)||filepath.VolumeName(rel)!=""||filepath.Clean(rel)!=rel||strings.ContainsAny(target.Executable,"\\:"){return m,"",errors.New("Observer manifest 可执行路径无效")}
  path:=filepath.Join(root,rel)
@@ -84,12 +84,15 @@ func ProbeObserver(root string)(ObserverInfo,error){
  return ObserverInfo{Version:c.Version,Executable:path,Backend:backend},nil
 }
 
- // Observer v0.2.0 reports implementation IDs (gdb-mi/lldb-dap),
+// Observer reports implementation IDs (gdb-mi/lldb-dap),
  // whereas session.backend uses selector names (gdb/lldb).
+// A release version identifies a build, not its session protocol. A direct
+// package probe also checks the manifest version against the executable.
+func validObserverVersion(v string)bool{return len(v)>0&&len(v)<=100&&kitVersion.MatchString(v)}
 func validateObserverCapabilities(c observerCapabilities,version,platform,arch,backend string)error{
  reported:=map[string]string{"gdb":"gdb-mi","lldb":"lldb-dap"}[backend]
- if reported==""||c.Version!=version||c.Platform!=platform||c.Arch!=arch||!hasV1(c.SessionSchemaVersions)||!hasString(c.Backends,reported)||!hasString(c.SessionFeatures,"backend")||!hasString(c.SessionFeatures,"comparison"){
-  return fmt.Errorf("Observer 能力不匹配: version=%q platform=%q arch=%q backends=%v schemas=%v features=%v; 需要 %s/%s %s (%s), session v1",c.Version,c.Platform,c.Arch,c.Backends,c.SessionSchemaVersions,c.SessionFeatures,platform,arch,version,reported)
+ if reported==""||!validObserverVersion(c.Version)||(version!=""&&c.Version!=version)||c.Platform!=platform||c.Arch!=arch||!hasV1(c.SessionSchemaVersions)||!hasString(c.Backends,reported)||!hasString(c.SessionFeatures,"backend")||!hasString(c.SessionFeatures,"comparison"){
+  return fmt.Errorf("Observer 能力不匹配: version=%q platform=%q arch=%q backends=%v schemas=%v features=%v; 需要 %s/%s (%s), session v1, backend/comparison",c.Version,c.Platform,c.Arch,c.Backends,c.SessionSchemaVersions,c.SessionFeatures,platform,arch,reported)
  }
  return nil
 }
@@ -150,7 +153,7 @@ func observationSource(s Source,raw []byte,p PreparedSource)([]byte,error){
 
 // Build a fresh current-source session; never label it as a historical run.
 func PrepareObservation(path,compiler,revision string,selection int,info ObserverInfo)(Observation,error){
- if isCPP(path){return Observation{},errors.New("Observer 0.2.0 仅支持 C99 源码")}
+ if isCPP(path){return Observation{},errors.New("当前观察会话仅支持 C99 源码")}
  s,e:=Open(path);if e!=nil{return Observation{},e}
  raw,e:=readSource(s);if e!=nil{return Observation{},e}
  p,e:=PrepareSource(s,raw);if e!=nil{return Observation{},e}
