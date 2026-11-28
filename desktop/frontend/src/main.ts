@@ -81,7 +81,7 @@ async function select(nav:Nav){
  if(!nav.root)return;
  navEpoch++;clearTimeout(saveTimer);saveError="";editingExpected=false;
  if(root!==nav.root){workbench.invalidate();if(root)expansionByRoot.set(root,new Set(expanded));root=nav.root;expanded=new Set(expansionByRoot.get(root)??[root,...restoreExpansion(root)]);treeEntries.clear();seenMissing.clear()}
- el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;const picker=el("openMenu").querySelector("summary")!;picker.textContent=(root.split(/[\\/]/).filter(Boolean).at(-1)??root)+" ▾";picker.title=root;
+ el("folder").textContent=root.split(/[\\/]/).filter(Boolean).at(-1)??root;el("folder").title=root;const picker=el("openMenu").querySelector("summary")!;picker.querySelector(".workspace-label")!.textContent=(root.split(/[\\/]/).filter(Boolean).at(-1)??root);picker.title=root;
  el("workspace").scrollTop=0;closeFileMenu();rawResult=false;status.textContent="";if(!observing)el("observerState").textContent="";
  source=nav.source.path?nav.source:undefined;cases=[];selected=0;last=undefined;dirty=false;loaded=false;result.hidden=true;el("orphans").replaceChildren();
  el("title").textContent=source?.name??"选择一个源文件";el("title").title=source?.path??"";el("path").hidden=false;el("path").textContent=source?source.directory.slice(root.length).replace(/^[\\/]/,"")||el("folder").textContent:root;el("path").title=source?.path??root;el("work").hidden=!source;el("fileActions").hidden=!source;el("batchSummary").textContent="";
@@ -168,7 +168,7 @@ async function navigate(action:()=>Promise<void>){
  busy=true;updateControls();drawTree();try{await save();navEpoch++;await action();await storeConfig()}catch(e){status.textContent=String(e)}finally{busy=false;updateControls();drawTree();void refreshTree(true)}
 }
 async function save(){clearTimeout(saveTimer);if(saveFlight)await saveFlight;if(!dirty)return;if(!loaded)throw Error("样例未加载，无法保存");const generation=editGeneration,path=source?.path,rev=revision,data=cases.map(c=>({...c}));saveError="";const task=(async()=>{try{const set=await call<CaseSet>("SaveCases",data,rev);if(source?.path!==path)throw Error("保存目标已变化");revision=set.revision;if(generation===editGeneration)dirty=false;else queueSave();saveError=""}catch(e){saveError=String(e);throw e}})();saveFlight=task;updateControls();try{await task}finally{if(saveFlight===task)saveFlight=undefined;updateControls()}}
-function uiIcon(name:string){const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","ui-icon");svg.setAttribute("aria-hidden","true");const use=document.createElementNS("http://www.w3.org/2000/svg","use");use.setAttribute("href","#"+name);svg.append(use);return svg}
+function uiIcon(name:string){const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","ui-icon");svg.setAttribute("aria-hidden","true");const use=document.createElementNS("http://www.w3.org/2000/svg","use");use.setAttribute("href","#routilet-icon-"+name);svg.append(use);return svg}
 function node(tag:string,text:string,cls=""){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;}
 function output(title:string,text:string){const d=node("div","","output-block");if(title)d.append(node("h3",title));d.append(node("pre",text||"（空输出）"));return d}
 function normalized(s:string){return s.replace(/\r\n/g,"\n").split("\n").map(l=>l.replace(/[ \t]+$/,"")).join("\n").replace(/\n+$/,"")}
